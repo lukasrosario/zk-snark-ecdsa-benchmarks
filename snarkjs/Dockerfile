@@ -62,6 +62,7 @@ COPY scripts/install-deps.sh /app/scripts/
 COPY scripts/compile-circuit.sh /app/scripts/
 COPY scripts/trusted-setup.sh /app/scripts/
 COPY scripts/compute-witnesses.sh /app/scripts/
+COPY scripts/generate-proofs.sh /app/scripts/
 COPY scripts/run.sh /app/scripts/
 
 # Make scripts executable
@@ -70,7 +71,11 @@ RUN chmod +x \
     /app/scripts/compile-circuit.sh \
     /app/scripts/trusted-setup.sh \
     /app/scripts/compute-witnesses.sh \
+    /app/scripts/generate-proofs.sh \
     /app/scripts/run.sh
 
+# Set default number of test cases
+ENV NUM_TEST_CASES=10
+
 # Default command to run setup and compilation
-CMD ["/app/scripts/run.sh"]
+ENTRYPOINT ["/app/scripts/run.sh"]
