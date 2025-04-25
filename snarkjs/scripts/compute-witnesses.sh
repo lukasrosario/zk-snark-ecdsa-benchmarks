@@ -3,15 +3,35 @@
 # Exit on error
 set -e
 
+# Default number of test cases
+NUM_TEST_CASES=10
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --num-test-cases|-n)
+      NUM_TEST_CASES="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 echo "🧮 Computing witnesses for all test cases..."
 
 # Create a directory for benchmark results
 mkdir -p ./benchmarks
 
+# Generate test case list based on NUM_TEST_CASES
+TEST_CASES=$(seq 1 $NUM_TEST_CASES | tr '\n' ',' | sed 's/,$//')
+
 # Run hyperfine with parameter list for test cases
-echo "📊 Running benchmarks for all test cases..."
+echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case 1,2,3,4,5,6,7,8,9,10 \
+    -L test_case $TEST_CASES \
     --export-json ./benchmarks/all_witnesses_benchmark.json \
     --export-markdown ./benchmarks/summary.md \
     'node ./out/circuit_js/generate_witness.js ./out/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json ./tests/witness_{test_case}.wtns'

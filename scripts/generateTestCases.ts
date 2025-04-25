@@ -70,6 +70,14 @@ function ensureDirectoryExists(dirPath: string): void {
   }
 }
 
+// Function to delete a directory if it exists
+function deleteDirectoryIfExists(dirPath: string): void {
+  if (fs.existsSync(dirPath)) {
+    fs.rmSync(dirPath, { recursive: true, force: true });
+    console.log(`Deleted existing directory: ${dirPath}`);
+  }
+}
+
 // Define the test case type for better type safety
 interface TestCase {
   index: number;
@@ -91,9 +99,26 @@ interface TestCase {
   sChunks: bigint[];
 }
 
+// Parse command line arguments
+function parseArgs(): { numTestCases: number } {
+  const args = process.argv.slice(2);
+  let numTestCases = 10; // Default value
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--num-test-cases' || args[i] === '-n') {
+      const value = parseInt(args[i + 1] ?? '10');
+      if (!isNaN(value) && value > 0) {
+        numTestCases = value;
+      }
+    }
+  }
+  
+  return { numTestCases };
+}
+
 // Main function to generate test cases
-async function generateTestCases() {
-  console.log("Generating ECDSA test cases...");
+async function generateTestCases(numTestCases: number) {
+  console.log(`Generating ${numTestCases} ECDSA test cases...`);
   
   // Generate a random challenge
   const challenge = new Uint8Array(32);
@@ -101,9 +126,9 @@ async function generateTestCases() {
   const challengeBigint = uint8ArrayToBigint(challenge);
   const challengeChunks = bigintToChunks(challengeBigint);
   
-  // Generate 10 key pairs
+  // Generate key pairs
   const keyPairs = await Promise.all(
-    Array(10).fill(null).map(() => generateKeyPair())
+    Array(numTestCases).fill(null).map(() => generateKeyPair())
   );
   
   // Generate signatures for each key pair
@@ -155,8 +180,12 @@ async function generateTestCases() {
     });
   }
   
+  // Delete existing tests directory if it exists
+  const testsDirPath = path.join('snarkjs', 'tests');
+  deleteDirectoryIfExists(testsDirPath);
+  
   // Create directory for snarkjs test cases
-  ensureDirectoryExists(path.join('snarkjs', 'tests'));
+  ensureDirectoryExists(testsDirPath);
   
   // Generate and save individual test cases for snarkjs
   testCases.forEach((testCase, i) => {
@@ -190,6 +219,7 @@ async function generateTestCases() {
   }
 }
 
-// Run the main function
-generateTestCases().catch(console.error);
+// Parse arguments and run the main function
+const { numTestCases } = parseArgs();
+generateTestCases(numTestCases).catch(console.error);
 
