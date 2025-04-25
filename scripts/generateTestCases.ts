@@ -103,7 +103,7 @@ async function generateTestCases() {
   
   // Generate 10 key pairs
   const keyPairs = await Promise.all(
-    Array(2).fill(null).map(() => generateKeyPair())
+    Array(10).fill(null).map(() => generateKeyPair())
   );
   
   // Generate signatures for each key pair
