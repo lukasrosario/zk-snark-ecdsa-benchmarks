@@ -10,4 +10,7 @@ echo "Compiling circuit..."
 echo "Running trusted setup..."
 ./scripts/trusted-setup.sh
 
+echo "Computing witnesses..."
+./scripts/compute-witnesses.sh
+
 echo "All done!" 
