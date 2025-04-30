@@ -26,4 +26,12 @@ echo "🧮 Computing witnesses..."
 echo "🔐 Generating proofs..."
 ./scripts/generate-proofs.sh --num-test-cases ${NUM_TEST_CASES:-10}
 
-echo "✅ All done! Check the benchmarks directory for results." 
+# Verify proofs
+echo "🔍 Verifying proofs..."
+./scripts/verify-proofs.sh --num-test-cases ${NUM_TEST_CASES:-10}
+
+# Benchmark gas usage
+echo "⛽ Benchmarking gas usage..."
+./scripts/benchmark-gas.sh --num-test-cases ${NUM_TEST_CASES:-10}
+
+echo "✅ All done! Check the benchmarks and gas-reports directories for results." 

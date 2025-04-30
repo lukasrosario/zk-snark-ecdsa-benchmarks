@@ -33,7 +33,7 @@ echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
 hyperfine --min-runs 1 --max-runs 1 \
     -L test_case $TEST_CASES \
     --export-json ./benchmarks/all_witnesses_benchmark.json \
-    --export-markdown ./benchmarks/summary.md \
+    --export-markdown ./benchmarks/witnesses_summary.md \
     'node ./out/circuit_js/generate_witness.js ./out/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json ./tests/witness_{test_case}.wtns'
 
 

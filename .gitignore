@@ -35,6 +35,14 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Benchmarks
 benchmarks
+gas-benchmark
 
 # Test cases
 tests
+
+# snarkjs
+*.zkey
+*.ptau
+verification_key.json
+verifier.sol
+GasTest.sol

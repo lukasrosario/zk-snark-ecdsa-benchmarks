@@ -34,6 +34,13 @@ RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfin
     dpkg -i hyperfine_1.19.0_arm64.deb && \
     rm hyperfine_1.19.0_arm64.deb
 
+# Install Foundry
+RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /root/.foundry/bin/foundryup
+
+# Add Foundry binaries to PATH
+ENV PATH="/root/.foundry/bin:${PATH}"
+
 # Set working directory
 WORKDIR /app
 
@@ -63,6 +70,8 @@ COPY scripts/compile-circuit.sh /app/scripts/
 COPY scripts/trusted-setup.sh /app/scripts/
 COPY scripts/compute-witnesses.sh /app/scripts/
 COPY scripts/generate-proofs.sh /app/scripts/
+COPY scripts/verify-proofs.sh /app/scripts/
+COPY scripts/benchmark-gas.sh /app/scripts/
 COPY scripts/run.sh /app/scripts/
 
 # Make scripts executable
@@ -72,6 +81,8 @@ RUN chmod +x \
     /app/scripts/trusted-setup.sh \
     /app/scripts/compute-witnesses.sh \
     /app/scripts/generate-proofs.sh \
+    /app/scripts/verify-proofs.sh \
+    /app/scripts/benchmark-gas.sh \
     /app/scripts/run.sh
 
 # Set default number of test cases

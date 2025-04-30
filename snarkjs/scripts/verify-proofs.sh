@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "🔐 Generating proofs for all test cases..."
+echo "🔍 Verifying proofs for all test cases..."
 
 # Create a directory for benchmark results
 mkdir -p ./benchmarks
@@ -32,11 +32,11 @@ TEST_CASES=$(seq 1 $NUM_TEST_CASES | tr '\n' ',' | sed 's/,$//')
 echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
 hyperfine --min-runs 1 --max-runs 1 \
     -L test_case $TEST_CASES \
-    --export-json ./benchmarks/all_proofs_benchmark.json \
-    --export-markdown ./benchmarks/proofs_summary.md \
-    'NODE_OPTIONS=--max_old_space_size=16384 snarkjs groth16 prove circuit.zkey ./tests/witness_{test_case}.wtns ./tests/proof_{test_case}.json ./tests/public_{test_case}.json'
+    --export-json ./benchmarks/all_verifications_benchmark.json \
+    --export-markdown ./benchmarks/verifications_summary.md \
+    'snarkjs groth16 verify verification_key.json ./tests/public_{test_case}.json ./tests/proof_{test_case}.json'
 
-echo "✅ All proofs generated successfully!"
+echo "✅ All proofs verified successfully!"
 
 # Calculate and display aggregate statistics
 echo ""
@@ -44,23 +44,23 @@ echo "📈 Aggregate Statistics:"
 echo "----------------------------------------"
 
 # Check if the JSON file exists and is valid
-if [ ! -f "./benchmarks/all_proofs_benchmark.json" ]; then
+if [ ! -f "./benchmarks/all_verifications_benchmark.json" ]; then
     echo "Error: Benchmark results file not found"
     exit 1
 fi
 
 # Calculate statistics with error handling
-if ! avg_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' ./benchmarks/all_proofs_benchmark.json 2>/dev/null); then
+if ! avg_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' ./benchmarks/all_verifications_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate average time"
     exit 1
 fi
 
-if ! min_time=$(jq -r '[.results[].min | select(. != null)] | min' ./benchmarks/all_proofs_benchmark.json 2>/dev/null); then
+if ! min_time=$(jq -r '[.results[].min | select(. != null)] | min' ./benchmarks/all_verifications_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate minimum time"
     exit 1
 fi
 
-if ! max_time=$(jq -r '[.results[].max | select(. != null)] | max' ./benchmarks/all_proofs_benchmark.json 2>/dev/null); then
+if ! max_time=$(jq -r '[.results[].max | select(. != null)] | max' ./benchmarks/all_verifications_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate maximum time"
     exit 1
 fi
@@ -73,7 +73,7 @@ if ! std_dev=$(jq -r '
     map(($mean - .) * ($mean - .)) |
     (add / length) | 
     sqrt
-' ./benchmarks/all_proofs_benchmark.json 2>/dev/null); then
+' ./benchmarks/all_verifications_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate standard deviation"
     exit 1
 fi
