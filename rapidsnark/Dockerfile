@@ -1,22 +1,33 @@
-# Use Node.js LTS version as base image
-FROM node:20-slim
+# Use Ubuntu as base image for better build support
+FROM ubuntu:22.04
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     build-essential \
+    cmake \
+    libgmp-dev \
+    libsodium-dev \
+    nasm \
     curl \
+    m4 \
     wget \
     jq \
-    bc \
+    vim-common \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install yarn
+RUN npm install -g yarn
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Install yarn
-RUN corepack enable && corepack prepare yarn@stable --activate
 
 # Install circom
 RUN git clone https://github.com/iden3/circom.git && \
@@ -36,10 +47,30 @@ RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfin
 
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
-RUN /root/.foundry/bin/foundryup -C d484a00089d789a19e2e43e63bbb3f1500eb2cbf
+RUN /root/.foundry/bin/foundryup
 
 # Add Foundry binaries to PATH
 ENV PATH="/root/.foundry/bin:${PATH}"
+
+# Clone rapidsnark FIRST
+RUN git clone https://github.com/iden3/rapidsnark.git
+
+# Build rapidsnark and run tests
+RUN cd rapidsnark && \
+    # Initialize and update submodules
+    git submodule init && \
+    git submodule update && \
+    # Clean any existing build artifacts
+    rm -rf build_prover && \
+    # Build GMP first
+    chmod +x build_gmp.sh && \
+    ./build_gmp.sh host_noasm && \
+    # Build rapidsnark
+    make host_noasm && \
+    ls && \
+    # Test rapidsnark with provided test files
+    ./package_noasm/bin/prover testdata/circuit_final.zkey testdata/witness.wtns testdata/proof.json testdata/public.json && \
+    echo "✅ rapidsnark build and test successful!"
 
 # Set working directory
 WORKDIR /app

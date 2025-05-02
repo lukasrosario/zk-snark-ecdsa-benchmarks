@@ -1,3 +1,6 @@
 [submodule "snarkjs/lib/circom-ecdsa-p256"]
 	path = snarkjs/lib/circom-ecdsa-p256
 	url = https://github.com/privacy-scaling-explorations/circom-ecdsa-p256
+[submodule "rapidsnark/lib/circom-ecdsa-p256"]
+	path = rapidsnark/lib/circom-ecdsa-p256
+	url = https://github.com/privacy-scaling-explorations/circom-ecdsa-p256

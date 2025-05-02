@@ -180,12 +180,16 @@ async function generateTestCases(numTestCases: number) {
     });
   }
   
-  // Delete existing tests directory if it exists
-  const testsDirPath = path.join('snarkjs', 'tests');
-  deleteDirectoryIfExists(testsDirPath);
+  // Delete existing tests directories if they exist
+  const snarkjsTestsDirPath = path.join('snarkjs', 'tests');
+  const rapidsnarkTestsDirPath = path.join('rapidsnark', 'tests');
   
-  // Create directory for snarkjs test cases
-  ensureDirectoryExists(testsDirPath);
+  deleteDirectoryIfExists(snarkjsTestsDirPath);
+  deleteDirectoryIfExists(rapidsnarkTestsDirPath);
+  
+  // Create directories for test cases
+  ensureDirectoryExists(snarkjsTestsDirPath);
+  ensureDirectoryExists(rapidsnarkTestsDirPath);
   
   // Generate and save individual test cases for snarkjs
   testCases.forEach((testCase, i) => {
@@ -199,13 +203,20 @@ async function generateTestCases(numTestCases: number) {
       ]
     };
     
+    // Save to snarkjs directory
     fs.writeFileSync(
       path.join('snarkjs', 'tests', `test_case_${i+1}.json`),
       JSON.stringify(snarkjsTestCase, null, 2)
     );
+    
+    // Save to rapidsnark directory
+    fs.writeFileSync(
+      path.join('rapidsnark', 'tests', `test_case_${i+1}.json`),
+      JSON.stringify(snarkjsTestCase, null, 2)
+    );
   });
   
-  console.log("Test cases generated successfully!");
+  console.log("Test cases generated successfully for both snarkjs and rapidsnark!");
   
   // Print a sample test case for verification
   const sampleCase = testCases[0];
