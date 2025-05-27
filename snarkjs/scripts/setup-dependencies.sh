@@ -304,6 +304,169 @@ install_circom() {
 }
 
 #########################
+# Snarkjs Installation
+#########################
+
+check_snarkjs() {
+  print_section "Checking snarkjs"
+  
+  if command -v snarkjs &> /dev/null; then
+    snarkjs_version=$(snarkjs --version 2>&1 || echo "version unknown")
+    print_message "$GREEN" "✅ snarkjs is already installed: $snarkjs_version"
+    return 0
+  else
+    print_message "$YELLOW" "⚠️ snarkjs is not installed or not in your PATH"
+    return 1
+  fi
+}
+
+install_snarkjs() {
+  print_message "$BLUE" "Installing snarkjs globally using npm..."
+  
+  if confirm "Would you like to install snarkjs now?"; then
+    if npm install -g snarkjs@latest; then
+      print_message "$GREEN" "✅ snarkjs installed successfully!"
+      return 0
+    else
+      print_message "$RED" "❌ Failed to install snarkjs."
+      print_message "$YELLOW" "You can manually install snarkjs by running: npm install -g snarkjs"
+      return 1
+    fi
+  else
+    print_message "$YELLOW" "⚠️ snarkjs installation skipped."
+    print_message "$YELLOW" "You'll need snarkjs to generate and verify proofs."
+    return 1
+  fi
+}
+
+#########################
+# Hyperfine Installation
+#########################
+
+check_hyperfine() {
+  print_section "Checking Hyperfine"
+  
+  if command -v hyperfine &> /dev/null; then
+    hyperfine_version=$(hyperfine --version 2>&1 || echo "version unknown")
+    print_message "$GREEN" "✅ Hyperfine is already installed: $hyperfine_version"
+    return 0
+  else
+    print_message "$YELLOW" "⚠️ Hyperfine is not installed or not in your PATH"
+    return 1
+  fi
+}
+
+install_hyperfine() {
+  print_message "$BLUE" "Installing Hyperfine..."
+  
+  if confirm "Would you like to install Hyperfine now?"; then
+    case "$OS" in
+      macos)
+        if command -v brew &> /dev/null; then
+          print_message "$BLUE" "Installing Hyperfine using Homebrew..."
+          if brew install hyperfine; then
+            print_message "$GREEN" "✅ Hyperfine installed successfully!"
+            return 0
+          else
+            print_message "$RED" "❌ Failed to install Hyperfine using Homebrew."
+          fi
+        elif command -v cargo &> /dev/null; then
+          print_message "$BLUE" "Installing Hyperfine using Cargo..."
+          if cargo install hyperfine; then
+            print_message "$GREEN" "✅ Hyperfine installed successfully!"
+            return 0
+          else
+            print_message "$RED" "❌ Failed to install Hyperfine using Cargo."
+          fi
+        else
+          print_message "$RED" "❌ Neither Homebrew nor Cargo is available to install Hyperfine."
+        fi
+        ;;
+      linux | wsl)
+        if command -v cargo &> /dev/null; then
+          print_message "$BLUE" "Installing Hyperfine using Cargo..."
+          if cargo install hyperfine; then
+            print_message "$GREEN" "✅ Hyperfine installed successfully!"
+            return 0
+          else
+            print_message "$RED" "❌ Failed to install Hyperfine using Cargo."
+          fi
+        else
+          print_message "$RED" "❌ Cargo is not available to install Hyperfine."
+          print_message "$YELLOW" "For Ubuntu/Debian, you can try: sudo apt install hyperfine (if available)"
+          print_message "$YELLOW" "For other distributions, see: https://github.com/sharkdp/hyperfine#installation"
+        fi
+        ;;
+      *)
+        print_message "$RED" "❌ Automatic installation of Hyperfine is not supported for your OS."
+        print_message "$YELLOW" "Please visit https://github.com/sharkdp/hyperfine#installation for manual installation instructions."
+        ;;
+    esac
+    return 1
+  else
+    print_message "$YELLOW" "⚠️ Hyperfine installation skipped."
+    print_message "$YELLOW" "You'll need Hyperfine for benchmarking."
+    return 1
+  fi
+}
+
+#########################
+# Foundry Installation
+#########################
+
+check_foundry() {
+  print_section "Checking Foundry"
+  
+  if command -v forge &> /dev/null && command -v cast &> /dev/null && command -v anvil &> /dev/null; then
+    forge_version=$(forge --version 2>&1 | head -n 1 || echo "version unknown")
+    print_message "$GREEN" "✅ Foundry (forge) is already installed: $forge_version"
+    
+    cast_version=$(cast --version 2>&1 | head -n 1 || echo "version unknown")
+    print_message "$GREEN" "✅ Foundry (cast) is already installed: $cast_version"
+    
+    anvil_version=$(anvil --version 2>&1 | head -n 1 || echo "version unknown")
+    print_message "$GREEN" "✅ Foundry (anvil) is already installed: $anvil_version"
+    
+    return 0
+  else
+    print_message "$YELLOW" "⚠️ Foundry is not installed or not in your PATH"
+    return 1
+  fi
+}
+
+install_foundry() {
+  print_message "$BLUE" "Installing Foundry using foundryup..."
+  
+  if confirm "Would you like to install Foundry now?"; then
+    # Download and run foundryup
+    if curl -L https://foundry.paradigm.xyz | bash; then
+      # Source the foundryup environment
+      if [ -f "$HOME/.foundry/bin/foundryup" ]; then
+        "$HOME/.foundry/bin/foundryup"
+        print_message "$GREEN" "✅ Foundry installed successfully!"
+        return 0
+      elif [ -f "$HOME/.cargo/bin/foundryup" ]; then
+        "$HOME/.cargo/bin/foundryup"
+        print_message "$GREEN" "✅ Foundry installed successfully!"
+        return 0
+      else
+        print_message "$YELLOW" "⚠️ foundryup installed but not found in expected locations."
+        print_message "$YELLOW" "Please run 'foundryup' manually to complete installation."
+        return 1
+      fi
+    else
+      print_message "$RED" "❌ Failed to install Foundry."
+      print_message "$YELLOW" "You can manually install Foundry by visiting: https://book.getfoundry.sh/getting-started/installation"
+      return 1
+    fi
+  else
+    print_message "$YELLOW" "⚠️ Foundry installation skipped."
+    print_message "$YELLOW" "You'll need Foundry for Ethereum contract development and testing."
+    return 1
+  fi
+}
+
+#########################
 # Main Script
 #########################
 
@@ -349,6 +512,29 @@ else
   print_message "$YELLOW" "Please install Rust first, then run this script again to install circom."
 fi
 
+# Check snarkjs (only if Node.js is available)
+if command -v npm &> /dev/null; then
+  check_snarkjs
+  if [ $? -ne 0 ]; then
+    install_snarkjs
+  fi
+else
+  print_message "$RED" "❌ Cannot check/install snarkjs: npm is not available."
+  print_message "$YELLOW" "Please install Node.js first, then run this script again to install snarkjs."
+fi
+
+# Check Hyperfine
+check_hyperfine
+if [ $? -ne 0 ]; then
+  install_hyperfine
+fi
+
+# Check Foundry
+check_foundry
+if [ $? -ne 0 ]; then
+  install_foundry
+fi
+
 # Summary
 print_section "Setup Summary"
 
@@ -388,6 +574,27 @@ if ! command -v circom &> /dev/null; then
   missing_deps=1
 else
   print_message "$GREEN" "✅ circom: Installed"
+fi
+
+if ! command -v snarkjs &> /dev/null; then
+  print_message "$RED" "❌ snarkjs: Not installed"
+  missing_deps=1
+else
+  print_message "$GREEN" "✅ snarkjs: Installed"
+fi
+
+if ! command -v hyperfine &> /dev/null; then
+  print_message "$RED" "❌ Hyperfine: Not installed"
+  missing_deps=1
+else
+  print_message "$GREEN" "✅ Hyperfine: Installed"
+fi
+
+if ! command -v forge &> /dev/null || ! command -v cast &> /dev/null || ! command -v anvil &> /dev/null; then
+  print_message "$RED" "❌ Foundry: Not installed"
+  missing_deps=1
+else
+  print_message "$GREEN" "✅ Foundry: Installed"
 fi
 
 if [ $missing_deps -eq 0 ]; then
