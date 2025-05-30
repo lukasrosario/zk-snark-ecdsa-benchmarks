@@ -13,7 +13,6 @@ echo "📦 Installing dependencies..."
 echo "🔨 Compiling circuit..."
 ./scripts/compile-circuit.sh
 
-
 # Run trusted setup
 echo "🔑 Running trusted setup..."
 ./scripts/trusted-setup.sh
