@@ -122,6 +122,127 @@ install_git() {
 }
 
 #########################
+# System Dependencies
+#########################
+
+check_system_deps() {
+  print_section "Checking System Dependencies"
+  
+  case "$OS" in
+    macos)
+      missing_deps=()
+      
+      brew_deps=("cmake" "gmp" "libsodium" "nasm" "m4")
+      for dep in "${brew_deps[@]}"; do
+        if ! brew list "$dep" &>/dev/null; then
+          missing_deps+=("$dep")
+        fi
+      done
+      
+      if [ ${#missing_deps[@]} -eq 0 ]; then
+        print_message "$GREEN" "✅ All system dependencies are installed"
+        return 0
+      else
+        print_message "$YELLOW" "⚠️ Missing system dependencies: ${missing_deps[*]}"
+        return 1
+      fi
+      ;;
+      
+    linux|wsl)
+      # We can't easily check for installed packages without sudo access
+      # Just inform the user about what's needed
+      print_message "$YELLOW" "⚠️ Please ensure the following packages are installed:"
+      print_message "$YELLOW" "  build-essential cmake libgmp-dev libsodium-dev nasm m4"
+      
+      if confirm "Would you like to check for these dependencies?"; then
+        missing_deps=()
+        
+        if ! dpkg -s build-essential &>/dev/null; then
+          missing_deps+=("build-essential")
+        fi
+        if ! dpkg -s cmake &>/dev/null; then
+          missing_deps+=("cmake")
+        fi
+        if ! dpkg -s libgmp-dev &>/dev/null; then
+          missing_deps+=("libgmp-dev")
+        fi
+        if ! dpkg -s libsodium-dev &>/dev/null; then
+          missing_deps+=("libsodium-dev")
+        fi
+        if ! dpkg -s nasm &>/dev/null; then
+          missing_deps+=("nasm")
+        fi
+        if ! dpkg -s m4 &>/dev/null; then
+          missing_deps+=("m4")
+        fi
+        
+        if [ ${#missing_deps[@]} -eq 0 ]; then
+          print_message "$GREEN" "✅ All system dependencies are installed"
+          return 0
+        else
+          print_message "$YELLOW" "⚠️ Missing system dependencies: ${missing_deps[*]}"
+          return 1
+        fi
+      else
+        # If the user chooses not to check, we'll assume they need to install
+        return 1
+      fi
+      ;;
+      
+    *)
+      print_message "$YELLOW" "⚠️ Cannot check system dependencies on this platform."
+      print_message "$YELLOW" "Please ensure you have the equivalent of:"
+      print_message "$YELLOW" "  build-essential cmake libgmp-dev libsodium-dev nasm m4"
+      return 1
+      ;;
+  esac
+}
+
+install_system_deps() {
+  print_message "$BLUE" "Installing system dependencies..."
+  
+  case "$OS" in
+    macos)
+      if command -v brew &> /dev/null; then
+        if confirm "Would you like to install required system dependencies using Homebrew?"; then
+          print_message "$BLUE" "Installing dependencies using Homebrew..."
+          brew install cmake gmp libsodium nasm m4
+          print_message "$GREEN" "✅ System dependencies installed successfully!"
+          return 0
+        else
+          print_message "$YELLOW" "⚠️ System dependencies installation skipped."
+          return 1
+        fi
+      else
+        print_message "$RED" "❌ Homebrew is not installed. Please install Homebrew first:"
+        echo "  /bin/bash -c \$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        return 1
+      fi
+      ;;
+      
+    linux|wsl)
+      if confirm "Would you like to install required system dependencies?"; then
+        print_message "$BLUE" "Installing dependencies using apt-get..."
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake libgmp-dev libsodium-dev nasm m4
+        print_message "$GREEN" "✅ System dependencies installed successfully!"
+        return 0
+      else
+        print_message "$YELLOW" "⚠️ System dependencies installation skipped."
+        return 1
+      fi
+      ;;
+      
+    *)
+      print_message "$RED" "❌ Automatic installation of system dependencies is not supported for your OS."
+      print_message "$YELLOW" "Please install the following dependencies manually:"
+      print_message "$YELLOW" "  build-essential cmake libgmp-dev libsodium-dev nasm m4"
+      return 1
+      ;;
+  esac
+}
+
+#########################
 # Node.js Installation
 #########################
 
@@ -304,42 +425,6 @@ install_circom() {
 }
 
 #########################
-# Snarkjs Installation
-#########################
-
-check_snarkjs() {
-  print_section "Checking snarkjs"
-  
-  if command -v snarkjs &> /dev/null; then
-    snarkjs_version=$(snarkjs --version 2>&1 || echo "version unknown")
-    print_message "$GREEN" "✅ snarkjs is already installed: $snarkjs_version"
-    return 0
-  else
-    print_message "$YELLOW" "⚠️ snarkjs is not installed or not in your PATH"
-    return 1
-  fi
-}
-
-install_snarkjs() {
-  print_message "$BLUE" "Installing snarkjs globally using npm..."
-  
-  if confirm "Would you like to install snarkjs now?"; then
-    if npm install -g snarkjs@latest; then
-      print_message "$GREEN" "✅ snarkjs installed successfully!"
-      return 0
-    else
-      print_message "$RED" "❌ Failed to install snarkjs."
-      print_message "$YELLOW" "You can manually install snarkjs by running: npm install -g snarkjs"
-      return 1
-    fi
-  else
-    print_message "$YELLOW" "⚠️ snarkjs installation skipped."
-    print_message "$YELLOW" "You'll need snarkjs to generate and verify proofs."
-    return 1
-  fi
-}
-
-#########################
 # Hyperfine Installation
 #########################
 
@@ -463,30 +548,112 @@ install_foundry() {
     print_message "$YELLOW" "⚠️ Foundry installation skipped."
     print_message "$YELLOW" "You'll need Foundry for Ethereum contract development and testing."
     return 1
-fi
+  fi
 }
 
 #########################
-# Git Submodules Update
+# RapidSnark Installation
 #########################
 
-update_git_submodules() {
-  print_section "Updating Git Submodules"
+check_rapidsnark() {
+  print_section "Checking RapidSnark"
   
-  print_message "$BLUE" "Initializing and updating git submodules..."
-  
-  if git submodule update --init --recursive; then
-    print_message "$GREEN" "✅ Git submodules updated successfully!"
-    return 0
-  else
-    print_message "$RED" "❌ Failed to update git submodules."
-    if confirm "Would you like to continue with setup anyway?"; then
-      print_message "$YELLOW" "⚠️ Continuing setup without updating submodules."
+  if [ -d "../rapidsnark" ]; then
+    print_message "$GREEN" "✅ rapidsnark repository exists"
+    
+    if [ -f "build/prover" ]; then
+      print_message "$GREEN" "✅ rapidsnark prover is already built"
       return 0
     else
-      print_message "$YELLOW" "Please fix the submodule issues and run this script again."
+      print_message "$YELLOW" "⚠️ rapidsnark repository exists but prover is not built"
       return 1
     fi
+  else
+    print_message "$YELLOW" "⚠️ rapidsnark repository does not exist"
+    return 1
+  fi
+}
+
+install_rapidsnark() {
+  print_message "$BLUE" "Setting up rapidsnark..."
+  
+  if confirm "Would you like to clone and build rapidsnark now?"; then
+    # Clone the repository if it doesn't exist
+    if [ ! -d "rapidsnark" ]; then
+      print_message "$BLUE" "Cloning rapidsnark repository..."
+      if ! git clone https://github.com/iden3/rapidsnark.git; then
+        print_message "$RED" "❌ Failed to clone rapidsnark repository."
+        return 1
+      fi
+    fi
+    
+    # Navigate to the rapidsnark directory
+    cd rapidsnark || {
+      print_message "$RED" "❌ Failed to navigate to rapidsnark directory."
+      return 1
+    }
+    
+    # Initialize and update submodules
+    print_message "$BLUE" "Initializing and updating submodules..."
+    if ! git submodule init && git submodule update; then
+      print_message "$RED" "❌ Failed to initialize and update submodules."
+      cd ..
+      return 1
+    fi
+    
+    # Clean any existing build artifacts
+    if [ -d "build_prover" ]; then
+      print_message "$BLUE" "Removing existing build directory..."
+      rm -rf build_prover
+    fi
+    
+    # Build GMP
+    print_message "$BLUE" "Building GMP..."
+    chmod +x build_gmp.sh
+    
+    # Use the appropriate build script based on OS
+    case "$OS" in
+      macos)
+        if ! ./build_gmp.sh; then
+          print_message "$RED" "❌ Failed to build GMP."
+          cd ..
+          return 1
+        fi
+        ;;
+      *)
+        if ! ./build_gmp.sh host_noasm; then
+          print_message "$RED" "❌ Failed to build GMP."
+          cd ..
+          return 1
+        fi
+        ;;
+    esac
+    
+    # Build rapidsnark
+    print_message "$BLUE" "Building rapidsnark..."
+    case "$OS" in
+      macos)
+        if ! make; then
+          print_message "$RED" "❌ Failed to build rapidsnark."
+          cd ..
+          return 1
+        fi
+        ;;
+      *)
+        if ! make host_noasm; then
+          print_message "$RED" "❌ Failed to build rapidsnark."
+          cd ..
+          return 1
+        fi
+        ;;
+    esac
+    
+    print_message "$GREEN" "✅ rapidsnark built successfully!"
+    cd ..
+    return 0
+  else
+    print_message "$YELLOW" "⚠️ rapidsnark setup skipped."
+    return 1
   fi
 }
 
@@ -494,7 +661,7 @@ update_git_submodules() {
 # Main Script
 #########################
 
-print_message "$BLUE" "🚀 Starting zk-SNARK ECDSA Benchmarks Setup"
+print_message "$BLUE" "🚀 Starting zk-SNARK ECDSA Benchmarks Setup (RapidSnark)"
 print_message "$BLUE" "Detected OS: $OS"
 
 # Check Git
@@ -505,10 +672,10 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# Update Git Submodules
-update_git_submodules
+# Check System Dependencies
+check_system_deps
 if [ $? -ne 0 ]; then
-  exit 1
+  install_system_deps
 fi
 
 # Check Node.js
@@ -542,17 +709,6 @@ else
   print_message "$YELLOW" "Please install Rust first, then run this script again to install circom."
 fi
 
-# Check snarkjs (only if Node.js is available)
-if command -v npm &> /dev/null; then
-  check_snarkjs
-  if [ $? -ne 0 ]; then
-    install_snarkjs
-  fi
-else
-  print_message "$RED" "❌ Cannot check/install snarkjs: npm is not available."
-  print_message "$YELLOW" "Please install Node.js first, then run this script again to install snarkjs."
-fi
-
 # Check Hyperfine
 check_hyperfine
 if [ $? -ne 0 ]; then
@@ -563,6 +719,12 @@ fi
 check_foundry
 if [ $? -ne 0 ]; then
   install_foundry
+fi
+
+# Check RapidSnark
+check_rapidsnark
+if [ $? -ne 0 ]; then
+  install_rapidsnark
 fi
 
 # Summary
@@ -577,6 +739,33 @@ if ! command -v git &> /dev/null; then
 else
   print_message "$GREEN" "✅ Git: Installed"
 fi
+
+# Check system dependencies based on OS
+case "$OS" in
+  macos)
+    system_deps_installed=true
+    brew_deps=("cmake" "gmp" "libsodium" "nasm" "m4")
+    for dep in "${brew_deps[@]}"; do
+      if ! brew list "$dep" &>/dev/null; then
+        print_message "$RED" "❌ $dep: Not installed"
+        system_deps_installed=false
+        missing_deps=1
+      fi
+    done
+    
+    if [ "$system_deps_installed" = true ]; then
+      print_message "$GREEN" "✅ System dependencies: Installed"
+    fi
+    ;;
+    
+  linux|wsl)
+    print_message "$YELLOW" "⚠️ System dependencies: Please ensure build-essential, cmake, libgmp-dev, libsodium-dev, nasm, and m4 are installed"
+    ;;
+    
+  *)
+    print_message "$YELLOW" "⚠️ System dependencies: Please ensure equivalent of build-essential, cmake, libgmp-dev, libsodium-dev, nasm, and m4 are installed"
+    ;;
+esac
 
 if ! command -v node &> /dev/null; then
   print_message "$RED" "❌ Node.js: Not installed"
@@ -606,13 +795,6 @@ else
   print_message "$GREEN" "✅ circom: Installed"
 fi
 
-if ! command -v snarkjs &> /dev/null; then
-  print_message "$RED" "❌ snarkjs: Not installed"
-  missing_deps=1
-else
-  print_message "$GREEN" "✅ snarkjs: Installed"
-fi
-
 if ! command -v hyperfine &> /dev/null; then
   print_message "$RED" "❌ Hyperfine: Not installed"
   missing_deps=1
@@ -627,13 +809,20 @@ else
   print_message "$GREEN" "✅ Foundry: Installed"
 fi
 
+if [ ! -d "rapidsnark" ] || [ ! -f "rapidsnark/build/prover" ]; then
+  print_message "$RED" "❌ RapidSnark: Not built"
+  missing_deps=1
+else
+  print_message "$GREEN" "✅ RapidSnark: Built"
+fi
+
 if [ $missing_deps -eq 0 ]; then
   print_message "$GREEN" "🎉 All dependencies are installed! You're ready to start the benchmarks."
   print_message "$BLUE" "Next steps:"
   print_message "$BLUE" "1. Return to the project root: cd .."
   print_message "$BLUE" "2. Install project dependencies: bun install"
   print_message "$BLUE" "3. Generate test cases: bun run tests:generate"
-  print_message "$BLUE" "4. Run benchmarks: cd snarkjs && ./scripts/run.sh"
+  print_message "$BLUE" "4. Run benchmarks: cd rapidsnark && ./scripts/run.sh"
 else
   print_message "$YELLOW" "⚠️ Some dependencies are missing. Please install them and run this script again."
 fi

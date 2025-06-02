@@ -181,8 +181,8 @@ async function generateTestCases(numTestCases: number) {
   }
   
   // Delete existing tests directories if they exist
-  const snarkjsTestsDirPath = path.join('snarkjs', 'tests');
-  const rapidsnarkTestsDirPath = path.join('rapidsnark', 'tests');
+  const snarkjsTestsDirPath = path.join('snarkjs', 'tests_js');
+  const rapidsnarkTestsDirPath = path.join('rapidsnark', 'tests_js');
   
   deleteDirectoryIfExists(snarkjsTestsDirPath);
   deleteDirectoryIfExists(rapidsnarkTestsDirPath);
@@ -205,13 +205,13 @@ async function generateTestCases(numTestCases: number) {
     
     // Save to snarkjs directory
     fs.writeFileSync(
-      path.join('snarkjs', 'tests', `test_case_${i+1}.json`),
+      path.join('snarkjs', 'tests_js', `test_case_${i+1}.json`),
       JSON.stringify(snarkjsTestCase, null, 2)
     );
     
     // Save to rapidsnark directory
     fs.writeFileSync(
-      path.join('rapidsnark', 'tests', `test_case_${i+1}.json`),
+      path.join('rapidsnark', 'tests_js', `test_case_${i+1}.json`),
       JSON.stringify(snarkjsTestCase, null, 2)
     );
   });
