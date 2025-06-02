@@ -116,8 +116,5 @@ RUN chmod +x \
     /app/scripts/benchmark-gas.sh \
     /app/scripts/run.sh
 
-# Set default number of test cases
-ENV NUM_TEST_CASES=10
-
 # Default command to run setup and compilation
 ENTRYPOINT ["/app/scripts/run.sh"]
