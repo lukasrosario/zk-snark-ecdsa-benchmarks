@@ -1,6 +1,6 @@
 # zk-SNARK ECDSA Benchmarks
 
-This repository contains a benchmarking suite for ECDSA signature verification using zero-knowledge proofs (zk-SNARKs) with both [snarkjs](https://github.com/iden3/snarkjs) and [rapidsnark](https://github.com/iden3/rapidsnark) implementations. It allows you to compare performance, proving time, and gas costs between these two zk-SNARK implementations.
+This repository contains a benchmarking suite for ECDSA signature verification using zero-knowledge proofs (zk-SNARKs) with [snarkjs](https://github.com/iden3/snarkjs), [rapidsnark](https://github.com/iden3/rapidsnark), and [Noir](https://noir-lang.org/) implementations. It allows you to compare performance, proving time, and gas costs between these zk-SNARK implementations.
 
 ## Project Overview
 
@@ -10,7 +10,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 2. Compiles Circom circuits for ECDSA verification
 3. Performs trusted setup, witness computation, and proof generation
 4. Measures proving time, verification time, and gas costs
-5. Compares performance between snarkjs (JavaScript) and rapidsnark (C++) implementations
+5. Compares performance between snarkjs (JavaScript), rapidsnark (C++), and Noir implementations
 
 ## Prerequisites
 
@@ -24,6 +24,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 - [circom](https://github.com/iden3/circom) - circuit compiler
 - [snarkjs](https://github.com/iden3/snarkjs) - JavaScript implementation of zk-SNARKs
 - [rapidsnark](https://github.com/iden3/rapidsnark) - C++ implementation of zk-SNARKs
+- [Noir v1.0.0-beta.4](https://noir-lang.org/) - Rust implementation of zk-SNARKs
 - [Foundry](https://github.com/foundry-rs/foundry) - Ethereum development toolkit
 - [Hyperfine](https://github.com/sharkdp/hyperfine) - Command-line benchmarking tool
 
@@ -56,7 +57,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing both implementations:
 
 ```bash
-bun run tests:generate --num-test-cases 10
+bun run tests:generate --num-test-cases=10
 ```
 
 This command:
@@ -64,11 +65,11 @@ This command:
 2. Creates signatures for a random challenge message
 3. Formats the signatures, public keys, and message hash into the required format for zk-SNARK circuits
 4. Splits the values into 43-bit chunks (required by the circuit constraints)
-5. Saves the test cases in both the `snarkjs/tests` and `rapidsnark/tests` directories
+5. Saves the test cases in the `snarkjs/tests`, `rapidsnark/tests`, and `noir/tests` directories
 
 ### Command line options:
 
-- `--num-test-cases` or `-n`: Number of test cases to generate (default: 10)
+- `--num-test-cases`: Number of test cases to generate (default: 10)
 
 ## Running Benchmarks
 
@@ -89,6 +90,24 @@ cd rapidsnark
 docker build -t zk-ecdsa-rapidsnark .
 docker run -e NUM_TEST_CASES=10 -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-rapidsnark
 ```
+
+### Noir Benchmarks
+
+```bash
+cd noir
+# First time setup - install dependencies
+./scripts/install-deps.sh
+# Run the benchmarks
+./scripts/run.sh
+```
+
+The Noir benchmarking process:
+1. Installs Noir (nargo) and Barretenberg (bb) dependencies
+2. Compiles the Noir ECDSA circuit and generates witnesses for each test case
+3. Generates zk-SNARK proofs for each witness
+4. Verifies the generated proofs
+
+After running the benchmarks, results and artifacts will be available in the `noir/target` directory, organized by test case.
 
 ### Manual Execution (without Docker)
 
@@ -149,6 +168,7 @@ After running the benchmarks, you'll find the results in:
 
 - `snarkjs/benchmarks/`: Contains proving time, verification time, and gas cost reports for snarkjs
 - `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark
+- `noir/target/`: Contains witness files, proofs, and verification keys for the Noir implementation
 
 You can compare these results to determine which implementation performs better for your specific use case.
 
@@ -168,6 +188,11 @@ zk-snark-ecdsa-benchmarks/
 │   ├── circuit.circom          # Same circuit implementation
 │   ├── Dockerfile              # Docker setup for rapidsnark
 │   ├── lib/                    # Dependencies and libraries
+│   ├── scripts/                # Benchmark scripts
+│   └── tests/                  # Generated test cases
+├── noir/                       # Noir implementation
+│   ├── src/main.nr             # Noir circuit implementation
+│   ├── Nargo.toml              # Noir project configuration
 │   ├── scripts/                # Benchmark scripts
 │   └── tests/                  # Generated test cases
 ├── package.json                # Project dependencies
