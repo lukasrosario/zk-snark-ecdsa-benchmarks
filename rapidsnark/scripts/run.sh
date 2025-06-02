@@ -3,10 +3,30 @@
 # Exit on error
 set -e
 
+# Parse command line arguments
+LOCAL_DEV=false
+for arg in "$@"; do
+  case $arg in
+    --local)
+      LOCAL_DEV=true
+      shift # Remove --local from processing
+      ;;
+    *)
+      # Unknown option
+      ;;
+  esac
+done
+
 echo "🚀 Starting ECDSA SNARK benchmark setup..."
 
 # Install dependencies
 echo "📦 Installing dependencies..."
+if [ "$LOCAL_DEV" = true ]; then
+  echo "🔧 Local development environment detected, using setup-dependencies.sh..."
+  ./scripts/setup-dependencies.sh
+fi
+
+echo "🐳 Installing dependecies..."
 ./scripts/install-deps.sh
 
 # Compile circuit

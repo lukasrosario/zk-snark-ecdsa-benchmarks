@@ -4,7 +4,7 @@ use rand::rngs::OsRng;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
-use num_bigint::BigUint;
+use num_bigint::{BigUint, ToBigUint};
 use sha2::{Sha256, Digest};
 
 /// CLI Arguments
@@ -19,10 +19,10 @@ struct Args {
 /// Test case data for snarkjs/rapidsnark
 #[derive(Serialize)]
 struct SnarkjsTestCase {
-    r: Vec<u8>,
-    s: Vec<u8>,
-    msghash: Vec<u8>,
-    pubkey: Vec<Vec<u8>>,
+    r: Vec<String>,
+    s: Vec<String>,
+    msghash: Vec<String>,
+    pubkey: Vec<Vec<String>>,
 }
 
 /// Normalize s value according to BIP-0062
@@ -45,6 +45,27 @@ fn normalize_s(s: &[u8]) -> Vec<u8> {
     } else {
         s.to_vec()
     }
+}
+
+/// Convert BigUint to array of 6 chunks of 43 bits each
+fn bigint_to_chunks(x: BigUint) -> Vec<String> {
+    let modulus = 2u128.pow(43).to_biguint().unwrap();
+    let mut chunks = Vec::new();
+    let mut x_temp = x;
+    
+    for _ in 0..6 {
+        let chunk = (&x_temp % &modulus).to_string();
+        // No padding, just the raw number as a string
+        chunks.push(chunk);
+        x_temp = x_temp / &modulus;
+    }
+    
+    chunks
+}
+
+/// Convert bytes to BigUint
+fn bytes_to_bigint(bytes: &[u8]) -> BigUint {
+    BigUint::from_bytes_be(bytes)
 }
 
 /// Format bytes for Noir TOML format
@@ -142,20 +163,37 @@ fn main() {
         // Normalize s value according to BIP-0062
         let normalized_s = normalize_s(s);
         
-        // Create SnarkJS/Rapidsnark test case
+        // Convert values to BigUint
+        let r_bigint = bytes_to_bigint(r);
+        let s_bigint = bytes_to_bigint(&normalized_s);
+        let msghash_bigint = bytes_to_bigint(&message_hash);
+        let pubkey_x_bigint = bytes_to_bigint(pubkey_x);
+        let pubkey_y_bigint = bytes_to_bigint(pubkey_y);
+        
+        // Convert BigUints to chunks
+        let r_chunks = bigint_to_chunks(r_bigint);
+        let s_chunks = bigint_to_chunks(s_bigint);
+        let msghash_chunks = bigint_to_chunks(msghash_bigint);
+        let pubkey_x_chunks = bigint_to_chunks(pubkey_x_bigint);
+        let pubkey_y_chunks = bigint_to_chunks(pubkey_y_bigint);
+        
+        // Create SnarkJS/Rapidsnark test case with chunked values
         let test_case = SnarkjsTestCase {
-            r: r.to_vec(),
-            s: normalized_s.clone(),
-            msghash: message_hash.clone(),
+            r: r_chunks,
+            s: s_chunks,
+            msghash: msghash_chunks,
             pubkey: vec![
-                pubkey_x.to_vec(),
-                pubkey_y.to_vec(),
+                pubkey_x_chunks,
+                pubkey_y_chunks,
             ],
         };
 
         // Save SnarkJS/Rapidsnark test cases
         let json = serde_json::to_string_pretty(&test_case)
             .expect("Failed to serialize test case");
+        
+        // Verify the serialization format (uncomment for debugging)
+        // println!("Serialized test case: {}", json);
         
         for dir in &[&snarkjs_tests_dir, &rapidsnark_tests_dir] {
             let file_path = dir.join(format!("test_case_{}.json", i + 1));
@@ -177,6 +215,7 @@ fn main() {
     }
 
     println!("Test cases generated successfully for SnarkJS, Rapidsnark, and Noir!");
+    println!("Files are saved with 6 chunks of 43 bits each for snarkjs/rapidsnark.");
 
     // Print sample case details for verification
     if args.num_test_cases > 0 {
@@ -186,8 +225,8 @@ fn main() {
         println!("Public Key X and Y: see generated files");
         println!("Signature R and S: see generated files");
         println!("\nTest files have been written to:");
-        println!("  - {}", snarkjs_tests_dir.display());
-        println!("  - {}", rapidsnark_tests_dir.display());
-        println!("  - {}", noir_tests_dir.display());
+        println!("  - {} (6 chunks of 43 bits)", snarkjs_tests_dir.display());
+        println!("  - {} (6 chunks of 43 bits)", rapidsnark_tests_dir.display());
+        println!("  - {} (TOML format)", noir_tests_dir.display());
     }
 }

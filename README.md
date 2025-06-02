@@ -38,18 +38,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
    cd zk-snark-ecdsa-benchmarks
    ```
 
-2. Initialize and update Git submodules (including nested submodules):
-   ```bash
-   git submodule update --init --recursive
-   ```
-   
-   This will:
-   - Initialize the main `circom-ecdsa-p256` submodules in both `snarkjs/lib` and `rapidsnark/lib` directories
-   - Automatically handle the nested `circom-pairing` submodule that exists within the `circom-ecdsa-p256` submodule
-   
-   Note: The nested structure is important for the circuit dependencies to work correctly.
-
-3. Install dependencies:
+2. Install dependencies:
    ```bash
    bun install
    ```
@@ -136,29 +125,25 @@ After running the benchmarks, results and artifacts will be available in the `no
 
 ### Manual Execution (without Docker)
 
-If you prefer to run benchmarks without Docker, you'll need to set up the dependencies and execute the scripts directly:
+If you prefer to run benchmarks without Docker, you can simply use the `--local` flag with the run script:
 
 1. For SnarkJS:
    ```bash
    cd snarkjs
-   # First time setup - install dependencies
-   ./scripts/setup-dependencies.sh
-   # Run the benchmarks
-   ./scripts/run.sh
+   # Run the benchmarks locally
+   ./scripts/run.sh --local
    cd ..
    ```
 
 2. For RapidSnark:
    ```bash
    cd rapidsnark
-   # First time setup - install dependencies
-   ./scripts/setup-dependencies.sh
-   # Run the benchmarks
-   ./scripts/run.sh
+   # Run the benchmarks locally
+   ./scripts/run.sh --local
    cd ..
    ```
 
-Note: The setup scripts will guide you through installing all required dependencies. You only need to run these setup scripts once, or when you want to update the dependencies. Some installations might require sudo privileges on Linux/WSL systems.
+Note: The `--local` flag automatically handles all dependencies without requiring you to run git submodules command or the setup-dependencies script for either rapidsnark or snarkjs.
 
 ### Environment Variables:
 

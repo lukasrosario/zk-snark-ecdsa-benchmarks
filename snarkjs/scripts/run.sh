@@ -3,6 +3,20 @@
 # Exit on error
 set -e
 
+# Parse command line arguments
+LOCAL_DEV=false
+for arg in "$@"; do
+  case $arg in
+    --local)
+      LOCAL_DEV=true
+      shift # Remove --local from processing
+      ;;
+    *)
+      # Unknown option
+      ;;
+  esac
+done
+
 echo "🚀 Starting ECDSA SNARK benchmark setup..."
 # Compile circuit
 echo "🔨 Compiling circuit..."
