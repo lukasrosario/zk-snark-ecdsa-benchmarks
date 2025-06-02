@@ -84,10 +84,8 @@ docker run -e NUM_TEST_CASES=10 -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-ra
 
 ```bash
 cd noir
-# First time setup - install dependencies
-./scripts/install-deps.sh
-# Run the benchmarks
-./scripts/run.sh
+docker build -t zk-ecdsa-noir .
+docker run -v $(pwd)/tests:/app/tests -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-noir
 ```
 
 The Noir benchmarking process:
