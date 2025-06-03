@@ -86,7 +86,7 @@ hyperfine --show-output --min-runs 1 --max-runs 1 \
     -L test_case $TEST_CASES \
     --export-json "$BENCHMARK_DIR/noir_verifications_benchmark.json" \
     --export-markdown "$BENCHMARK_DIR/noir_verifications_summary.md" \
-    "cd $TARGET_DIR/{test_case} && ls && bb verify -k vk -p proof --oracle_hash keccak"
+    "cd $TARGET_DIR/{test_case} && bb verify -k vk -p proof -i public_inputs --oracle_hash keccak"
 
 print_message "$GREEN" "✅ All proofs verified successfully!"
 

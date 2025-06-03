@@ -35,7 +35,7 @@ RUN curl -L https://raw.githubusercontent.com/noir-lang/noirup/refs/heads/main/i
 ENV PATH="/root/.nargo/bin:${PATH}"
 RUN echo 'export PATH="$HOME/.nargo/bin:$PATH"' >> ~/.bashrc
 # Verify nargo is installed correctly and in PATH
-RUN noirup -v
+RUN noirup -v 1.0.0-beta.4
 
 # Install bbup and bb (Barretenberg)
 RUN curl -L https://raw.githubusercontent.com/AztecProtocol/aztec-packages/refs/heads/master/barretenberg/bbup/install | bash

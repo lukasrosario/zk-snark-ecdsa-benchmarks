@@ -83,7 +83,7 @@ nargo compile
 bb write_vk -b "$TARGET_DIR/$NARGO_TOML_PACKAGE_NAME.json" -o "$TARGET_DIR" --oracle_hash keccak
 
 # Generate the Solidity verifier from the verification key
-bb write_solidity_verifier -k "$TARGET_DIR/vk" -o "$CONTRACT_DIR/plonk_vk.sol"
+bb write_solidity_verifier -k "$TARGET_DIR/vk" -o "$TARGET_DIR/Verifier.sol"
 
 # Ensure we're using relative paths
 print_message "$CYAN" "📁 Creating Foundry project directory..."
@@ -101,7 +101,7 @@ solc = "0.8.29"
 EOF
 
 # Copy and rename the verifier to match the contract name
-cp ../contract/plonk_vk.sol src/NoirVerifier.sol
+cp ../target/Verifier.sol src/NoirVerifier.sol
 
 print_message "$CYAN" "📝 Creating test contract..."
 cat > src/GasTest.sol << 'EOF'
@@ -153,20 +153,30 @@ for i in $(seq 1 $NUM_TEST_CASES); do
     fi
   
     # Format the proof for Solidity verification
+    # Note: Proofs should be generated with the --output_format bytes_and_fields flag
+    # Example: bb prove -b ./target/<circuit-name>.json -w ./target/<witness-name> -o ./target --oracle_hash keccak --output_format bytes_and_fields
     print_message "$CYAN" "Formatting proof as hex string..."
     PROOF_HEX=$(echo -n "0x"; xxd -p "$TEST_CASE_DIR/proof" | tr -d '\n')
-    echo "$PROOF_HEX"
+    
     # Read public inputs from proof_fields.json
+    # This file is created when using --output_format bytes_and_fields with bb prove
     print_message "$CYAN" "Reading public inputs from JSON file..."
-    if [ ! -f "$TEST_CASE_DIR/proof_fields.json" ]; then
-        print_message "$YELLOW" "Error: Public inputs file not found at $TEST_CASE_DIR/proof_fields.json"
+    
+    # Check for both potential filenames - bb may create public_inputs_fields.json or proof_fields.json
+    if [ -f "$TEST_CASE_DIR/public_inputs_fields.json" ]; then
+        PROOF_FIELDS_FILE="$TEST_CASE_DIR/public_inputs_fields.json"
+    elif [ -f "$TEST_CASE_DIR/proof_fields.json" ]; then
+        PROOF_FIELDS_FILE="$TEST_CASE_DIR/proof_fields.json"
+    else
+        print_message "$YELLOW" "Error: Public inputs file not found at $TEST_CASE_DIR/public_inputs_fields.json or $TEST_CASE_DIR/proof_fields.json"
+        print_message "$CYAN" "Make sure proofs are generated with: bb prove -b ./target/<circuit-name>.json -w ./target/<witness-name> -o ./target --oracle_hash keccak --output_format bytes_and_fields"
         exit 1
     fi
     
-    # Get the public inputs as an array of hex values - proof_fields.json contains a direct array
-    PUBLIC_INPUTS=$(jq -r '. | join(",")' "$TEST_CASE_DIR/proof_fields.json")
+    # Get the public inputs as an array of hex values - the fields json file contains a direct array
+    PUBLIC_INPUTS=$(jq -r '. | join(",")' "$PROOF_FIELDS_FILE")
     
-    print_message "$CYAN" "Creating Solidity test with data from proof_fields.json"
+    print_message "$CYAN" "Creating Solidity test with data from public inputs file"
     
     # Create a test file for this specific test case
     cat > test/GasTest.t.sol << EOF
@@ -185,13 +195,13 @@ contract GasTestTest is Test {
     
     function testVerifyProof${i}() public view {
         bytes memory proof = hex"${PROOF_HEX:2}";
-        bytes32[] memory publicInputs = new bytes32[]($(jq '. | length' "$TEST_CASE_DIR/proof_fields.json"));
+        bytes32[] memory publicInputs = new bytes32[]($(jq '. | length' "$PROOF_FIELDS_FILE"));
         
         // Set all public inputs from the JSON file
 EOF
     
     # Add each public input separately
-    jq -r 'to_entries | .[] | "        publicInputs[" + (.key | tostring) + "] = bytes32(" + .value + ");  // Public input " + (.key | tostring)' "$TEST_CASE_DIR/proof_fields.json" >> test/GasTest.t.sol
+    jq -r 'to_entries | .[] | "        publicInputs[" + (.key | tostring) + "] = bytes32(" + .value + ");  // Public input " + (.key | tostring)' "$PROOF_FIELDS_FILE" >> test/GasTest.t.sol
     
     # Finish the test file
     cat >> test/GasTest.t.sol << EOF
@@ -204,7 +214,7 @@ EOF
 
     print_message "$CYAN" "⛽ Running gas report for test case $i..."
     # Run the test and capture the gas report
-    forge test --match-test testVerifyProof${i} --gas-report
+    forge test --match-test testVerifyProof${i} --gas-report > ./gas-reports/test_case_${i}_gas_report.txt
     
     # Extract the gas usage from the report and add it to the summary
     echo "Test Case $i:" >> ./gas-reports/summary.txt
