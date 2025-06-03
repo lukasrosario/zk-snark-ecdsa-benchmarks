@@ -26,6 +26,11 @@ fi
 
 # Create a fresh out directory
 mkdir out
+
+# Create the c++ witness executable 
+circom circuit.circom --r1cs --c -o ./out
+
+#Create the witness json files
 circom circuit.circom --r1cs --wasm -o ./out
 
 echo "✅ Circuit compilation completed successfully!" 

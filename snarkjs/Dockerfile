@@ -55,6 +55,12 @@ RUN mkdir -p lib && \
     git checkout 5b916ea5241d07c5b5953dd5724d7fb771ad76d8 && \
     git submodule update --init --recursive
 
+# Install npm dependencies in circom-ecdsa-p256
+RUN cd lib/circom-ecdsa-p256 && npm install
+
+# Install yarn dependencies in circom-pairing
+RUN cd lib/circom-ecdsa-p256/circuits/circom-pairing && yarn install
+
 # Create tests directory
 RUN mkdir -p /app/tests
 
@@ -65,7 +71,6 @@ COPY circuit.circom /app/
 COPY tests/*.json /app/tests/
 
 # Copy scripts
-COPY scripts/install-deps.sh /app/scripts/
 COPY scripts/compile-circuit.sh /app/scripts/
 COPY scripts/trusted-setup.sh /app/scripts/
 COPY scripts/compute-witnesses.sh /app/scripts/
@@ -76,7 +81,6 @@ COPY scripts/run.sh /app/scripts/
 
 # Make scripts executable
 RUN chmod +x \
-    /app/scripts/install-deps.sh \
     /app/scripts/compile-circuit.sh \
     /app/scripts/trusted-setup.sh \
     /app/scripts/compute-witnesses.sh \

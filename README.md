@@ -14,21 +14,13 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) runtime for test case generation
-- [Docker](https://www.docker.com/) for running the benchmarks in isolated environments
-- Node.js and npm (if running without Docker)
+- [Rust](https://rustup.rs/) for test case generation
+- [Docker](https://www.docker.com/) for running the benchmarks
 - Git
 
-### Additional dependencies (installed automatically in Docker)
+All other dependencies (circom, snarkjs, rapidsnark, Noir, Foundry, Hyperfine) are automatically installed within the Docker containers.
 
-- [circom](https://github.com/iden3/circom) - circuit compiler
-- [snarkjs](https://github.com/iden3/snarkjs) - JavaScript implementation of zk-SNARKs
-- [rapidsnark](https://github.com/iden3/rapidsnark) - C++ implementation of zk-SNARKs
-- [Noir v1.0.0-beta.4](https://noir-lang.org/) - Rust implementation of zk-SNARKs
-- [Foundry](https://github.com/foundry-rs/foundry) - Ethereum development toolkit
-- [Hyperfine](https://github.com/sharkdp/hyperfine) - Command-line benchmarking tool
-
-## Installation
+## Quick Start
 
 1. Clone this repository:
    ```bash
@@ -36,9 +28,9 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
    cd zk-snark-ecdsa-benchmarks
    ```
 
-2. Install dependencies:
+2. Generate test cases using the Rust binary:
    ```bash
-   bun install
+   cargo run --bin generate_test_cases -- --num-test-cases=10
    ```
 
 ## Generating Test Cases
@@ -46,7 +38,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing both implementations:
 
 ```bash
-bun run tests:generate --num-test-cases=10
+cargo run --bin generate_test_cases -- --num-test-cases=10
 ```
 
 This command:
@@ -62,7 +54,7 @@ This command:
 
 ## Running Benchmarks
 
-You can run benchmarks for both implementations using Docker. This ensures a consistent environment and avoids dependency conflicts.
+All benchmarks run in Docker containers to ensure consistent environments and avoid dependency conflicts.
 
 ### SnarkJS Benchmarks
 
@@ -95,28 +87,6 @@ The Noir benchmarking process:
 4. Verifies the generated proofs
 
 After running the benchmarks, results and artifacts will be available in the `noir/target` directory, organized by test case.
-
-### Manual Execution (without Docker)
-
-If you prefer to run benchmarks without Docker, you can simply use the `--local` flag with the run script:
-
-1. For SnarkJS:
-   ```bash
-   cd snarkjs
-   # Run the benchmarks locally
-   ./scripts/run.sh --local
-   cd ..
-   ```
-
-2. For RapidSnark:
-   ```bash
-   cd rapidsnark
-   # Run the benchmarks locally
-   ./scripts/run.sh --local
-   cd ..
-   ```
-
-Note: The `--local` flag automatically handles all dependencies without requiring you to run git submodules command or the setup-dependencies script for either rapidsnark or snarkjs.
 
 ### Environment Variables:
 
@@ -160,7 +130,7 @@ You can compare these results to determine which implementation performs better 
 ```
 zk-snark-ecdsa-benchmarks/
 ├── scripts/
-│   └── generateTestCases.ts    # Test case generation script
+│   └── generate_test_cases.rs   # Rust test case generation binary
 ├── snarkjs/                    # SnarkJS implementation
 │   ├── circuit.circom          # Circuit implementation
 │   ├── Dockerfile              # Docker setup for snarkjs
@@ -178,7 +148,7 @@ zk-snark-ecdsa-benchmarks/
 │   ├── Nargo.toml              # Noir project configuration
 │   ├── scripts/                # Benchmark scripts
 │   └── tests/                  # Generated test cases
-├── package.json                # Project dependencies
+├── Cargo.toml                  # Rust project configuration
 └── README.md                   # This file
 ```
 

@@ -38,10 +38,6 @@ if [ "$LOCAL_DEV" = true ]; then
   ./scripts/setup-dependencies.sh
 fi
 
-# Install dependencies
-echo "📦 Installing dependencies..."
-./scripts/install-deps.sh
-
 # Compile circuit
 echo "🔨 Compiling circuit..."
 ./scripts/compile-circuit.sh
