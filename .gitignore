@@ -45,4 +45,17 @@ tests
 *.ptau
 verification_key.json
 verifier.sol
+
 GasTest.sol
+
+# Ignore Noir build artifacts
+noir/target/
+noir/tests/
+
+target/
+
+rapidsnark/lib
+rapidsnark/rapidsnark
+
+pot22_final.ptau
+*/data/*
