@@ -60,25 +60,19 @@ fi
 echo "📝 Found ${#missing_witnesses[@]} missing witness files out of $NUM_TEST_CASES total."
 echo "💡 Missing witnesses: ${missing_witnesses[*]}"
 
-# Compute missing witnesses individually first
+# Compute missing witnesses with benchmark
 echo "🔄 Computing missing witnesses..."
-for test_case in "${missing_witnesses[@]}"; do
-    echo "  Computing witness for test case $test_case..."
-    node /out/compilation/circuit_js/generate_witness.js /out/compilation/circuit_js/circuit.wasm ./tests/test_case_${test_case}.json /out/witnesses/witness_${test_case}.wtns
-done
+# Create comma-separated list of missing test cases for hyperfine
+MISSING_TEST_CASES=$(printf "%s," "${missing_witnesses[@]}" | sed 's/,$//')
+echo "🔄 Running benchmark for missing test cases: $MISSING_TEST_CASES"
 
-# Now run the benchmark for all test cases (including previously existing ones)
-# Generate test case list from discovered test cases
-TEST_CASES=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
-
-# Run hyperfine with parameter list for test cases
-echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case $TEST_CASES \
+    -L test_case $MISSING_TEST_CASES \
     --show-output \
     --export-json /out/benchmarks/all_witnesses_benchmark.json \
     --export-markdown /out/benchmarks/witnesses_summary.md \
     'node /out/compilation/circuit_js/generate_witness.js /out/compilation/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json /out/witnesses/witness_{test_case}.wtns'
+
 
 echo "✅ All witnesses computed successfully!"
 

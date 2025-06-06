@@ -17,7 +17,6 @@ if [ -f "/out/setup/circuit.zkey" ] && [ -f "/out/setup/verification_key.json" ]
 fi
 
 # Check if powers of tau file is mounted/available
-echo "pwd: $(pwd)"
 if [ ! -f "pot22_final.ptau" ]; then
     echo "❌ Powers of tau file not found!"
     echo "📝 Please mount the powers of tau file as a volume:"

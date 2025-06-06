@@ -60,21 +60,14 @@ fi
 echo "📝 Found ${#missing_proofs[@]} missing proof files out of $NUM_TEST_CASES total."
 echo "💡 Missing proofs: ${missing_proofs[*]}"
 
-# Generate missing proofs individually first
+# Generate missing proofs with benchmark
 echo "🔄 Generating missing proofs..."
-for test_case in "${missing_proofs[@]}"; do
-    echo "  Generating proof for test case $test_case..."
-    NODE_OPTIONS=--max_old_space_size=16384 snarkjs groth16 prove /out/setup/circuit.zkey /out/witnesses/witness_${test_case}.wtns /out/proofs/proof_${test_case}.json /out/proofs/public_${test_case}.json
-done
+# Create comma-separated list of missing test cases for hyperfine
+MISSING_TEST_CASES=$(printf "%s," "${missing_proofs[@]}" | sed 's/,$//')
+echo "🔄 Running benchmark for missing test cases: $MISSING_TEST_CASES"
 
-# Now run the benchmark for all test cases (including previously existing ones)
-# Generate test case list from discovered test cases
-TEST_CASES=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
-
-# Run hyperfine with parameter list for test cases
-echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case $TEST_CASES \
+    -L test_case $MISSING_TEST_CASES \
     --show-output \
     --export-json /out/benchmarks/all_proofs_benchmark.json \
     --export-markdown /out/benchmarks/proofs_summary.md \
