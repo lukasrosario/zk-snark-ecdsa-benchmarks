@@ -15,17 +15,26 @@ fi
 
 echo "🔨 Starting circuit compilation..."
 
+# Check if circuit is already compiled
+if [ -f "/out/compilation/circuit.r1cs" ] && [ -f "/out/compilation/circuit_js/circuit.wasm" ]; then
+    echo "✅ Circuit already compiled, skipping compilation step."
+    echo "   Found: /out/compilation/circuit.r1cs and /out/compilation/circuit_js/circuit.wasm"
+    echo "   To recompile, delete the '/out/compilation' directory first."
+    exit 0
+fi
+
 # Compile the circuit
 echo "📝 Compiling circuit.circom..."
 
-# Check if out directory exists and remove it if it does
-if [ -d "out" ]; then
-    echo "📂 Removing existing out directory..."
-    rm -rf out
+# Create the compilation output directory
+mkdir -p /out/compilation
+
+# Check if compilation directory exists and remove it if it does
+if [ -d "/out/compilation" ] && [ "$(ls -A /out/compilation)" ]; then
+    echo "📂 Removing existing compilation directory contents..."
+    rm -rf /out/compilation/*
 fi
 
-# Create a fresh out directory
-mkdir out
-circom circuit.circom --r1cs --wasm -o ./out
+circom circuit.circom --r1cs --wasm -o /out/compilation
 
 echo "✅ Circuit compilation completed successfully!" 

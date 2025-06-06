@@ -3,30 +3,57 @@
 # Exit on error
 set -e
 
-# Default number of test cases
-NUM_TEST_CASES=${NUM_TEST_CASES:-1}
+echo "⛽ Benchmarking gas usage for all test cases..."
 
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --num-test-cases|-n)
-      NUM_TEST_CASES="$2"
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
-  esac
+# Create gas benchmark output directory
+mkdir -p /out/gas-reports
+
+# Discover test cases from tests directory
+TEST_CASE_FILES=(./tests/test_case_*.json)
+if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
+    echo "❌ No test case files found in tests directory!"
+    echo "   Expected files like: test_case_1.json, test_case_2.json, etc."
+    exit 1
+fi
+
+# Extract test case numbers and sort them
+TEST_CASE_NUMBERS=()
+for file in "${TEST_CASE_FILES[@]}"; do
+    # Extract number from filename (e.g., test_case_3.json -> 3)
+    if [[ $file =~ test_case_([0-9]+)\.json ]]; then
+        TEST_CASE_NUMBERS+=(${BASH_REMATCH[1]})
+    fi
 done
 
+# Sort the test case numbers
+IFS=$'\n' TEST_CASE_NUMBERS=($(sort -n <<<"${TEST_CASE_NUMBERS[*]}"))
+unset IFS
+
+NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
+
+echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
+
+# Check if gas benchmarking has already been completed
+if [ -f "/out/gas-reports/all_gas_data.json" ] && [ -f "/out/gas-reports/summary.txt" ]; then
+    echo "✅ Gas benchmarking already completed, skipping gas benchmark step."
+    echo "   Found gas reports for all test cases."
+    echo "   To re-run gas benchmarks, delete the '/out/gas-reports' directory first."
+    
+    # Display existing results
+    echo "📊 Displaying existing gas benchmark results:"
+    if [ -f "/out/gas-reports/summary.txt" ]; then
+        cat /out/gas-reports/summary.txt
+    fi
+    exit 0
+fi
+
 echo "🔨 Generating Solidity verifier..."
-snarkjs zkey export solidityverifier circuit.zkey verifier.sol
+snarkjs zkey export solidityverifier /out/setup/circuit.zkey /out/gas-reports/verifier.sol
 
 # Create a new directory for the Foundry project
 echo "📁 Creating Foundry project directory..."
-mkdir -p gas-benchmark
-cd gas-benchmark
+mkdir -p /out/gas-reports/gas-benchmark
+cd /out/gas-reports/gas-benchmark
 
 echo "🔧 Setting up Foundry..."
 forge init --no-git
@@ -65,22 +92,19 @@ forge build
 
 echo "🧪 Running gas benchmarks for $NUM_TEST_CASES test cases..."
 
-# Create a directory for gas reports
-mkdir -p ./gas-reports
-
 # Create a summary file for all gas reports
-echo "Gas Usage Summary" > ./gas-reports/summary.txt
-echo "=================" >> ./gas-reports/summary.txt
-echo "" >> ./gas-reports/summary.txt
+echo "Gas Usage Summary" > ../summary.txt
+echo "=================" >> ../summary.txt
+echo "" >> ../summary.txt
 
 # Create a JSON file to store all gas data for statistics
-echo "{" > ./gas-reports/all_gas_data.json
-echo "  \"results\": [" >> ./gas-reports/all_gas_data.json
+echo "{" > ../all_gas_data.json
+echo "  \"results\": [" >> ../all_gas_data.json
 
 # Run gas report for each test case
-for i in $(seq 1 $NUM_TEST_CASES); do
+for i in "${TEST_CASE_NUMBERS[@]}"; do
     echo "📊 Generating calldata for test case $i..."
-    CALLDATA=$(cd .. && snarkjs generatecall ./tests/public_${i}.json ./tests/proof_${i}.json)
+    CALLDATA=$(cd /app && snarkjs generatecall /out/verification/public_${i}.json /out/verification/proof_${i}.json)
     
     # Format the calldata as proper JSON
     FORMATTED_CALLDATA="[$CALLDATA]"
@@ -135,18 +159,18 @@ EOF
 
     echo "⛽ Running gas report for test case $i..."
     # Run the test and capture the gas report
-    forge test --match-test testVerifyProof${i} --gas-report > ./gas-reports/test_case_${i}_gas_report.txt
+    forge test --match-test testVerifyProof${i} --gas-report > ../test_case_${i}_gas_report.txt
     
     # Extract the gas usage from the report and add it to the summary
-    echo "Test Case $i:" >> ./gas-reports/summary.txt
+    echo "Test Case $i:" >> ../summary.txt
     
     # Save the full gas report to the summary file
-    cat ./gas-reports/test_case_${i}_gas_report.txt >> ./gas-reports/summary.txt
-    echo "" >> ./gas-reports/summary.txt
+    cat ../test_case_${i}_gas_report.txt >> ../summary.txt
+    echo "" >> ../summary.txt
     
     # Extract the actual gas usage from the test result line
     # The format is: [PASS] testVerifyProof1() (gas: 411848)
-    GAS_USAGE=$(grep -o "testVerifyProof${i}() (gas: [0-9]*)" ./gas-reports/test_case_${i}_gas_report.txt | sed -E 's/.*\(gas: ([0-9]*)\)/\1/')
+    GAS_USAGE=$(grep -o "testVerifyProof${i}() (gas: [0-9]*)" ../test_case_${i}_gas_report.txt | sed -E 's/.*\(gas: ([0-9]*)\)/\1/')
     
     if [ -z "$GAS_USAGE" ]; then
         echo "Error: Could not extract gas usage from test result for test case $i"
@@ -154,16 +178,16 @@ EOF
     fi
     
     # Add to JSON file
-    if [ $i -eq 1 ]; then
-        echo "    {" >> ./gas-reports/all_gas_data.json
+    if [ "$i" = "${TEST_CASE_NUMBERS[0]}" ]; then
+        echo "    {" >> ../all_gas_data.json
     else
-        echo "    ,{" >> ./gas-reports/all_gas_data.json
+        echo "    ,{" >> ../all_gas_data.json
     fi
-    echo "      \"test_case\": $i," >> ./gas-reports/all_gas_data.json
-    echo "      \"mean\": $GAS_USAGE," >> ./gas-reports/all_gas_data.json
-    echo "      \"min\": $GAS_USAGE," >> ./gas-reports/all_gas_data.json
-    echo "      \"max\": $GAS_USAGE" >> ./gas-reports/all_gas_data.json
-    echo "    }" >> ./gas-reports/all_gas_data.json
+    echo "      \"test_case\": $i," >> ../all_gas_data.json
+    echo "      \"mean\": $GAS_USAGE," >> ../all_gas_data.json
+    echo "      \"min\": $GAS_USAGE," >> ../all_gas_data.json
+    echo "      \"max\": $GAS_USAGE" >> ../all_gas_data.json
+    echo "    }" >> ../all_gas_data.json
     
     # Display a concise gas report for this test case
     echo "Gas Report for Test Case $i:"
@@ -172,15 +196,15 @@ EOF
 done
 
 # Close the JSON file
-echo "  ]" >> ./gas-reports/all_gas_data.json
-echo "}" >> ./gas-reports/all_gas_data.json
+echo "  ]" >> ../all_gas_data.json
+echo "}" >> ../all_gas_data.json
 
 # Move back to the original directory
-cd ..
+cd /app
 
-echo "✅ Gas benchmarking complete! Check the gas-benchmark/gas-reports directory for results."
+echo "✅ Gas benchmarking complete! Check the /out/gas-reports directory for results."
 echo "📊 Summary of gas usage:"
-cat ./gas-benchmark/gas-reports/summary.txt
+cat /out/gas-reports/summary.txt
 
 # Calculate and display aggregate statistics
 echo ""
@@ -188,23 +212,23 @@ echo "📈 Aggregate Statistics:"
 echo "----------------------------------------"
 
 # Check if the JSON file exists and is valid
-if [ ! -f "./gas-benchmark/gas-reports/all_gas_data.json" ]; then
+if [ ! -f "/out/gas-reports/all_gas_data.json" ]; then
     echo "Error: Gas data file not found"
     exit 1
 fi
 
 # Calculate statistics with error handling
-if ! avg_gas=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' ./gas-benchmark/gas-reports/all_gas_data.json 2>/dev/null); then
+if ! avg_gas=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' /out/gas-reports/all_gas_data.json 2>/dev/null); then
     echo "Error: Could not calculate average gas usage"
     exit 1
 fi
 
-if ! min_gas=$(jq -r '[.results[].min | select(. != null)] | min' ./gas-benchmark/gas-reports/all_gas_data.json 2>/dev/null); then
+if ! min_gas=$(jq -r '[.results[].min | select(. != null)] | min' /out/gas-reports/all_gas_data.json 2>/dev/null); then
     echo "Error: Could not calculate minimum gas usage"
     exit 1
 fi
 
-if ! max_gas=$(jq -r '[.results[].max | select(. != null)] | max' ./gas-benchmark/gas-reports/all_gas_data.json 2>/dev/null); then
+if ! max_gas=$(jq -r '[.results[].max | select(. != null)] | max' /out/gas-reports/all_gas_data.json 2>/dev/null); then
     echo "Error: Could not calculate maximum gas usage"
     exit 1
 fi
@@ -217,7 +241,7 @@ if ! std_dev=$(jq -r '
     map(($mean - .) * ($mean - .)) |
     (add / length) | 
     sqrt
-' ./gas-benchmark/gas-reports/all_gas_data.json 2>/dev/null); then
+' /out/gas-reports/all_gas_data.json 2>/dev/null); then
     echo "Error: Could not calculate standard deviation"
     exit 1
 fi

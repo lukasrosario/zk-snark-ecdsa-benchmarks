@@ -86,24 +86,20 @@ docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
   zk-ecdsa-snarkjs
 ```
 
-For **simple one-time execution** (legacy command):
-
-```bash
-cd snarkjs
-docker build -t zk-ecdsa-snarkjs .
-cd ..
-docker run -e NUM_TEST_CASES=10 -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-snarkjs
-```
-
-**📖 See `snarkjs/README_RESUMABLE.md` for detailed resumable execution documentation.**
-
 ### RapidSnark Benchmarks
 
 ```bash
 cd rapidsnark
+# Create persistent directory for all outputs
+mkdir -p data
+
 docker build -t zk-ecdsa-rapidsnark .
 cd ..
-docker run -e NUM_TEST_CASES=10 -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-rapidsnark
+
+docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
+  -v $(pwd)/rapidsnark/data:/out \
+  --name zk-ecdsa-rapidsnark-benchmark \
+  zk-ecdsa-rapidsnark
 ```
 
 ### Noir Benchmarks
