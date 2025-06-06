@@ -3,38 +3,75 @@
 # Exit on error
 set -e
 
-# Default number of test cases
-NUM_TEST_CASES=10
-
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --num-test-cases|-n)
-      NUM_TEST_CASES="$2"
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
-  esac
-done
-
 echo "🧮 Computing witnesses for all test cases..."
 
-# Create a directory for benchmark results
-mkdir -p ./benchmarks
+# Create directories for witnesses and benchmark results
+mkdir -p /out/witnesses
+mkdir -p /out/benchmarks
 
-# Generate test case list based on NUM_TEST_CASES
-TEST_CASES=$(seq 1 $NUM_TEST_CASES | tr '\n' ',' | sed 's/,$//')
+# Discover test cases from tests directory
+TEST_CASE_FILES=(./tests/test_case_*.json)
+if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
+    echo "❌ No test case files found in tests directory!"
+    echo "   Expected files like: test_case_1.json, test_case_2.json, etc."
+    exit 1
+fi
 
-# Run hyperfine with parameter list for test cases
-echo "📊 Running benchmarks for $NUM_TEST_CASES test cases..."
+# Extract test case numbers and sort them
+TEST_CASE_NUMBERS=()
+for file in "${TEST_CASE_FILES[@]}"; do
+    # Extract number from filename (e.g., test_case_3.json -> 3)
+    if [[ $file =~ test_case_([0-9]+)\.json ]]; then
+        TEST_CASE_NUMBERS+=(${BASH_REMATCH[1]})
+    fi
+done
+
+# Sort the test case numbers
+IFS=$'\n' TEST_CASE_NUMBERS=($(sort -n <<<"${TEST_CASE_NUMBERS[*]}"))
+unset IFS
+
+NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
+
+echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
+
+# Check if all witness files already exist
+missing_witnesses=()
+for test_case in "${TEST_CASE_NUMBERS[@]}"; do
+    if [ ! -f "/out/witnesses/witness_${test_case}.wtns" ]; then
+        missing_witnesses+=($test_case)
+    fi
+done
+
+if [ ${#missing_witnesses[@]} -eq 0 ]; then
+    echo "✅ All witness files already exist, skipping witness computation."
+    echo "   Found all witness files for test cases: ${TEST_CASE_NUMBERS[*]}"
+    echo "   To recompute witnesses, delete the witness files first."
+    
+    # Still check if we have benchmark results
+    if [ -f "/out/benchmarks/all_witnesses_benchmark.json" ]; then
+        echo "📊 Displaying existing benchmark results:"
+        if [ -f "/out/benchmarks/witnesses_summary.md" ]; then
+            cat /out/benchmarks/witnesses_summary.md
+        fi
+    fi
+    exit 0
+fi
+
+echo "📝 Found ${#missing_witnesses[@]} missing witness files out of $NUM_TEST_CASES total."
+echo "💡 Missing witnesses: ${missing_witnesses[*]}"
+
+# Compute missing witnesses with benchmark
+echo "🔄 Computing missing witnesses..."
+# Create comma-separated list of missing test cases for hyperfine
+MISSING_TEST_CASES=$(printf "%s," "${missing_witnesses[@]}" | sed 's/,$//')
+echo "🔄 Running benchmark for missing test cases: $MISSING_TEST_CASES"
+
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case $TEST_CASES \
-    --export-json ./benchmarks/all_witnesses_benchmark.json \
-    --export-markdown ./benchmarks/witnesses_summary.md \
-    'node ./out/circuit_js/generate_witness.js ./out/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json ./tests/witness_{test_case}.wtns'
+    -L test_case $MISSING_TEST_CASES \
+    --show-output \
+    --export-json /out/benchmarks/all_witnesses_benchmark.json \
+    --export-markdown /out/benchmarks/witnesses_summary.md \
+    'node /out/compilation/circuit_js/generate_witness.js /out/compilation/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json /out/witnesses/witness_{test_case}.wtns'
 
 
 echo "✅ All witnesses computed successfully!"
@@ -45,23 +82,23 @@ echo "📈 Aggregate Statistics:"
 echo "----------------------------------------"
 
 # Check if the JSON file exists and is valid
-if [ ! -f "./benchmarks/all_witnesses_benchmark.json" ]; then
+if [ ! -f "/out/benchmarks/all_witnesses_benchmark.json" ]; then
     echo "Error: Benchmark results file not found"
     exit 1
 fi
 
 # Calculate statistics with error handling
-if ! avg_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' ./benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
+if ! avg_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' /out/benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate average time"
     exit 1
 fi
 
-if ! min_time=$(jq -r '[.results[].min | select(. != null)] | min' ./benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
+if ! min_time=$(jq -r '[.results[].min | select(. != null)] | min' /out/benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate minimum time"
     exit 1
 fi
 
-if ! max_time=$(jq -r '[.results[].max | select(. != null)] | max' ./benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
+if ! max_time=$(jq -r '[.results[].max | select(. != null)] | max' /out/benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate maximum time"
     exit 1
 fi
@@ -74,7 +111,7 @@ if ! std_dev=$(jq -r '
     map(($mean - .) * ($mean - .)) |
     (add / length) | 
     sqrt
-' ./benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
+' /out/benchmarks/all_witnesses_benchmark.json 2>/dev/null); then
     echo "Error: Could not calculate standard deviation"
     exit 1
 fi

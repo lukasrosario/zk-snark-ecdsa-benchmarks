@@ -15,9 +15,11 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 ## Prerequisites
 
 - [Bun](https://bun.sh/) runtime for test case generation
-- [Docker](https://www.docker.com/) for running the benchmarks in isolated environments
-- Node.js and npm (if running without Docker)
-- Git
+- [Docker](https://www.docker.com/) for running the benchmarks in isolated environments (with 16GB memory allocated)
+- Download powers of tau
+```bash
+   curl -L "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau" -o pot22_final.ptau
+```
 
 ### Additional dependencies (installed automatically in Docker)
 
@@ -72,23 +74,64 @@ This command:
 
 ## Running Benchmarks
 
+### NOTE: Go do docker -> Gear icon (settings) -> Resources -> Set Memory 16GB
+
 You can run benchmarks for both implementations using Docker. This ensures a consistent environment and avoids dependency conflicts.
 
 ### SnarkJS Benchmarks
 
+For **resumable execution** (recommended for long-running benchmarks):
+
+```bash
+cd snarkjs
+# Create persistent directory for all outputs
+mkdir -p data
+
+docker build -t zk-ecdsa-snarkjs .
+cd ..
+
+docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
+  -v $(pwd)/snarkjs/data:/out \
+  --name zk-ecdsa-snarkjs-benchmark \
+  zk-ecdsa-snarkjs
+```
+
+For **simple one-time execution** (legacy command):
+
 ```bash
 cd snarkjs
 docker build -t zk-ecdsa-snarkjs .
-docker run -e NUM_TEST_CASES=10 -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-snarkjs
+cd ..
+docker run -e NUM_TEST_CASES=10 -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-snarkjs
 ```
+
+**📖 See `snarkjs/README_RESUMABLE.md` for detailed resumable execution documentation.**
 
 ### RapidSnark Benchmarks
 
 ```bash
 cd rapidsnark
 docker build -t zk-ecdsa-rapidsnark .
-docker run -e NUM_TEST_CASES=10 -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-rapidsnark
+cd ..
+docker run -e NUM_TEST_CASES=10 -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-rapidsnark
 ```
+
+### Noir Benchmarks
+
+```bash
+cd noir
+docker build -t zk-ecdsa-noir .
+cd ..
+docker run -v $(pwd)/tests:/app/tests -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-noir
+```
+
+The Noir benchmarking process:
+1. Installs Noir (nargo) and Barretenberg (bb) dependencies
+2. Compiles the Noir ECDSA circuit and generates witnesses for each test case
+3. Generates zk-SNARK proofs for each witness
+4. Verifies the generated proofs
+
+After running the benchmarks, results and artifacts will be available in the `noir/target` directory, organized by test case.
 
 ### Manual Execution (without Docker)
 

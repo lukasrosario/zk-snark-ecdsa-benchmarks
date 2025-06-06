@@ -55,6 +55,15 @@ RUN mkdir -p lib && \
     git checkout 5b916ea5241d07c5b5953dd5724d7fb771ad76d8 && \
     git submodule update --init --recursive
 
+# Install npm dependencies in circom-ecdsa-p256
+RUN cd lib/circom-ecdsa-p256 && npm install
+
+# Install yarn dependencies in circom-pairing (if it exists)
+RUN cd lib/circom-ecdsa-p256 && \
+    if [ -d "circuits/circom-pairing" ]; then \
+        cd circuits/circom-pairing && yarn install; \
+    fi
+
 # Create tests directory
 RUN mkdir -p /app/tests
 
@@ -65,28 +74,7 @@ COPY circuit.circom /app/
 COPY tests/*.json /app/tests/
 
 # Copy scripts
-COPY scripts/install-deps.sh /app/scripts/
-COPY scripts/compile-circuit.sh /app/scripts/
-COPY scripts/trusted-setup.sh /app/scripts/
-COPY scripts/compute-witnesses.sh /app/scripts/
-COPY scripts/generate-proofs.sh /app/scripts/
-COPY scripts/verify-proofs.sh /app/scripts/
-COPY scripts/benchmark-gas.sh /app/scripts/
-COPY scripts/run.sh /app/scripts/
-
-# Make scripts executable
-RUN chmod +x \
-    /app/scripts/install-deps.sh \
-    /app/scripts/compile-circuit.sh \
-    /app/scripts/trusted-setup.sh \
-    /app/scripts/compute-witnesses.sh \
-    /app/scripts/generate-proofs.sh \
-    /app/scripts/verify-proofs.sh \
-    /app/scripts/benchmark-gas.sh \
-    /app/scripts/run.sh
-
-# Set default number of test cases
-ENV NUM_TEST_CASES=10
+COPY scripts /app/scripts
 
 # Default command to run setup and compilation
 ENTRYPOINT ["/app/scripts/run.sh"]
