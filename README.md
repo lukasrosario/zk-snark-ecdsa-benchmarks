@@ -106,7 +106,6 @@ For **resumable execution** (recommended for long-running benchmarks):
 
 ```bash
 cd noir
-# Create persistent directory for all outputs
 mkdir -p data
 
 docker build -t zk-ecdsa-noir .

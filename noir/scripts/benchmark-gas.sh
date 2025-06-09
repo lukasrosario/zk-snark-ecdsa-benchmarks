@@ -49,6 +49,7 @@ print_message "$CYAN" "⛽ Starting gas usage benchmarking for Noir ECDSA proofs
 # Create persistent output directories
 mkdir -p /out/gas
 mkdir -p /out/contracts
+mkdir -p /out/test-contracts
 
 # Circuit file path
 CIRCUIT_FILE="/out/compilation/benchmarking.json"
@@ -141,6 +142,10 @@ contract GasTest {
 }
 EOF
 
+    # Copy the GasTest contract to the persistent output directory
+    print_message "$CYAN" "💾 Saving GasTest contract to /out/test-contracts/GasTest.sol"
+    cp src/GasTest.sol "/out/test-contracts/GasTest.sol"
+
     forge build
     print_message "$GREEN" "✅ Foundry project set up successfully!"
 else
@@ -174,6 +179,7 @@ for proof_dir in /out/proofs/test_case_*; do
     
     PROOF_FILE="$proof_dir/proof"
     PROOF_FIELDS_FILE="$proof_dir/proof_fields.json"
+    PUBLIC_INPUTS_FILE="$proof_dir/public_inputs_fields.json"
     
     # Check if required files exist
     if [ ! -f "$PROOF_FILE" ] || [ ! -f "$PROOF_FIELDS_FILE" ]; then
@@ -187,7 +193,15 @@ for proof_dir in /out/proofs/test_case_*; do
     PROOF_HEX=$(echo -n "0x"; xxd -p "$PROOF_FILE" | tr -d '\n')
     
     # Get the public inputs as an array of hex values
-    PUBLIC_INPUTS=$(jq -r '. | join(",")' "$PROOF_FIELDS_FILE")
+    PUBLIC_INPUTS_COUNT=$(jq -r '. | length' "$PUBLIC_INPUTS_FILE")
+    print_message "$CYAN" "   Found $PUBLIC_INPUTS_COUNT public inputs"
+
+    # Extract all public input values dynamically
+    PUBLIC_INPUTS_ARRAY=()
+    for ((i=0; i<PUBLIC_INPUTS_COUNT; i++)); do
+        PUBLIC_INPUT_VALUE=$(jq -r ".[$i]" "$PUBLIC_INPUTS_FILE")
+        PUBLIC_INPUTS_ARRAY+=("$PUBLIC_INPUT_VALUE")
+    done
     
     # Create a test file for this specific test case
     cat > test/GasTest.t.sol << EOF
@@ -206,12 +220,21 @@ contract GasTestTest is Test {
     
     function testVerifyProof${TEST_NUMBER}() public view {
         bytes memory proof = hex"${PROOF_HEX:2}";
-        bytes32[] memory publicInputs = new bytes32[](0);
+        
+        // Dynamic public inputs array with ${PUBLIC_INPUTS_COUNT} elements
+        bytes32[] memory publicInputs = new bytes32[](${PUBLIC_INPUTS_COUNT});
+$(for ((i=0; i<PUBLIC_INPUTS_COUNT; i++)); do
+    echo "        publicInputs[$i] = bytes32(uint256(${PUBLIC_INPUTS_ARRAY[$i]}));"
+done)
         
         gasTest.verifyProof(proof, publicInputs);
     }
 }
 EOF
+
+    # Copy the test contract to the persistent output directory
+    print_message "$CYAN" "   💾 Saving test contract to /out/test-contracts/${BASENAME}_Test.sol"
+    cp test/GasTest.t.sol "/out/test-contracts/${BASENAME}_Test.sol"
 
     print_message "$CYAN" "   ⛽ Running gas report..."
     # Run the test and capture the gas report
