@@ -70,8 +70,6 @@ You can run benchmarks for both implementations using Docker. This ensures a con
 
 ### SnarkJS Benchmarks
 
-For **resumable execution** (recommended for long-running benchmarks):
-
 ```bash
 cd snarkjs
 # Create persistent directory for all outputs
@@ -102,7 +100,6 @@ docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
 
 ### Noir Benchmarks
 
-For **resumable execution** (recommended for long-running benchmarks):
 
 ```bash
 cd noir
@@ -116,27 +113,6 @@ docker run -v $(pwd)/noir/tests:/app/tests \
   --name zk-ecdsa-noir-benchmark \
   zk-ecdsa-noir
 ```
-
-For **simple one-time execution** (legacy command):
-
-```bash
-cd noir
-docker build -t zk-ecdsa-noir .
-cd ..
-docker run -v $(pwd)/tests:/app/tests -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-noir
-```
-
-**📖 See `noir/README_RESUMABLE.md` for detailed resumable execution documentation.**
-
-The Noir benchmarking process:
-1. Compiles the Noir ECDSA circuit with public inputs matching snarkjs/rapidsnark
-2. Generates witnesses for each test case  
-3. Generates zk-SNARK proofs for each witness
-4. Verifies the generated proofs
-5. Benchmarks gas usage using Foundry
-6. Generates comprehensive summary report
-
-After running the benchmarks, results and artifacts will be available in the `noir/data` directory, organized by step and test case.
 
 ## Understanding Test Case Structure
 
