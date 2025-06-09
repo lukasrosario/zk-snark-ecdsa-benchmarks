@@ -81,30 +81,28 @@ fn generate_noir_toml(
     hashed_message: &[u8],
     pub_key_x: &[u8],
     pub_key_y: &[u8],
-    signature_r: &[u8],
-    signature_s: &[u8],
+    signature: &[u8],
 ) -> String {
-    // Convert byte arrays to BigUint (Field values)
-    let hashed_message_field = bytes_to_bigint(hashed_message);
-    let pub_key_x_field = bytes_to_bigint(pub_key_x);
-    let pub_key_y_field = bytes_to_bigint(pub_key_y);
-    let signature_r_field = bytes_to_bigint(signature_r);
-    let signature_s_field = bytes_to_bigint(signature_s);
-
     format!(
-        r#"hashed_message = "{}"
-pub_key_x = "{}"
-pub_key_y = "{}"
-signature_r = "{}"
-signature_s = "{}"
-"#,
-        hashed_message_field.to_string(),
-        pub_key_x_field.to_string(),
-        pub_key_y_field.to_string(),
-        signature_r_field.to_string(),
-        signature_s_field.to_string()
+        r#"hashed_message = [
+    {}
+]
+pub_key_x = [
+    {}
+]
+pub_key_y = [
+    {}
+]
+signature = [
+    {}
+]"#,
+        format_bytes_for_toml(hashed_message),
+        format_bytes_for_toml(pub_key_x),
+        format_bytes_for_toml(pub_key_y),
+        format_bytes_for_toml(signature)
     )
 }
+
 
 /// Ensure a directory exists, creating it if necessary
 fn ensure_directory_exists(dir_path: &Path) {
@@ -208,8 +206,7 @@ fn main() {
             &message_hash,
             pubkey_x,
             pubkey_y,
-            r,
-            &normalized_s,
+            &[r, &normalized_s].concat(),
         );
         
         let noir_file_path = noir_tests_dir.join(format!("test_case_{}.toml", i + 1));
