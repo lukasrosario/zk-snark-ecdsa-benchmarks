@@ -3,6 +3,7 @@
 # Exit on error
 set -e
 
+
 echo "🚀 Starting ECDSA SNARK benchmark setup..."
 # Compile circuit
 echo "🔨 Compiling circuit..."

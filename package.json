@@ -12,6 +12,6 @@
     "@peculiar/webcrypto": "^1.5.0"
   },
   "scripts": {
-    "tests:generate": "bun scripts/generateTestCases.ts"
+    "tests:generate": "cargo run --bin generate_test_cases --"
   }
 }

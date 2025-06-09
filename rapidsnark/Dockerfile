@@ -45,6 +45,11 @@ RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfin
     dpkg -i hyperfine_1.19.0_arm64.deb && \
     rm hyperfine_1.19.0_arm64.deb
 
+RUN mkdir -p /app
+
+# Download Powers of Tau file
+RUN curl -L "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau" -o /app/pot22_final.ptau
+
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
 RUN /root/.foundry/bin/foundryup
@@ -91,10 +96,6 @@ RUN mkdir -p /app/tests
 
 # Copy circuit file
 COPY circuit.circom /app/
-
-# Copy test cases
-COPY tests/*.json /app/tests/
-
 # Copy scripts
 COPY scripts/install-deps.sh /app/scripts/
 COPY scripts/compile-circuit.sh /app/scripts/
@@ -115,9 +116,6 @@ RUN chmod +x \
     /app/scripts/verify-proofs.sh \
     /app/scripts/benchmark-gas.sh \
     /app/scripts/run.sh
-
-# Set default number of test cases
-ENV NUM_TEST_CASES=10
 
 # Default command to run setup and compilation
 ENTRYPOINT ["/app/scripts/run.sh"]
