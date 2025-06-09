@@ -15,18 +15,18 @@ echo "🔑 Running trusted setup..."
 
 # Compute witnesses
 echo "🧮 Computing witnesses..."
-./scripts/compute-witnesses.sh --num-test-cases $NUM_TEST_CASES
+./scripts/compute-witnesses.sh
 
 # Generate proofs
 echo "🔐 Generating proofs..."
-./scripts/generate-proofs.sh --num-test-cases $NUM_TEST_CASES
+./scripts/generate-proofs.sh
 
 # Verify proofs
 echo "🔍 Verifying proofs..."
-./scripts/verify-proofs.sh --num-test-cases $NUM_TEST_CASES
+./scripts/verify-proofs.sh
 
 # Benchmark gas usage
 echo "⛽ Benchmarking gas usage..."
-./scripts/benchmark-gas.sh --num-test-cases $NUM_TEST_CASES
+./scripts/benchmark-gas.sh
 
 echo "✅ All done! Check the benchmarks and gas-reports directories for results." 
