@@ -123,32 +123,6 @@ The Noir benchmarking process:
 
 After running the benchmarks, results and artifacts will be available in the `noir/target` directory, organized by test case.
 
-### Manual Execution (without Docker)
-
-If you prefer to run benchmarks without Docker, you can simply use the `--local` flag with the run script:
-
-1. For SnarkJS:
-   ```bash
-   cd snarkjs
-   # Run the benchmarks locally
-   ./scripts/run.sh --local
-   cd ..
-   ```
-
-2. For RapidSnark:
-   ```bash
-   cd rapidsnark
-   # Run the benchmarks locally
-   ./scripts/run.sh --local
-   cd ..
-   ```
-
-Note: The `--local` flag automatically handles all dependencies without requiring you to run git submodules command or the setup-dependencies script for either rapidsnark or snarkjs.
-
-### Environment Variables:
-
-- `NUM_TEST_CASES`: Number of test cases to use for benchmarking (default: 10)
-
 ## Understanding Test Case Structure
 
 Each test case includes:
