@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     m4 \
     wget \
     jq \
+    bc \
     vim-common \
     && rm -rf /var/lib/apt/lists/*
 
@@ -52,7 +53,7 @@ RUN curl -L "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_2
 
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
-RUN /root/.foundry/bin/foundryup
+RUN /root/.foundry/bin/foundryup -C d484a00089d789a19e2e43e63bbb3f1500eb2cbf
 
 # Add Foundry binaries to PATH
 ENV PATH="/root/.foundry/bin:${PATH}"
@@ -91,31 +92,22 @@ RUN mkdir -p lib && \
     git checkout 5b916ea5241d07c5b5953dd5724d7fb771ad76d8 && \
     git submodule update --init --recursive
 
+# Install npm dependencies in circom-ecdsa-p256
+RUN cd lib/circom-ecdsa-p256 && npm install
+
+# Install yarn dependencies in circom-pairing (if it exists)
+RUN cd lib/circom-ecdsa-p256 && \
+    if [ -d "circuits/circom-pairing" ]; then \
+        cd circuits/circom-pairing && yarn install; \
+    fi
+
 # Create tests directory
 RUN mkdir -p /app/tests
 
 # Copy circuit file
 COPY circuit.circom /app/
 # Copy scripts
-COPY scripts/install-deps.sh /app/scripts/
-COPY scripts/compile-circuit.sh /app/scripts/
-COPY scripts/trusted-setup.sh /app/scripts/
-COPY scripts/compute-witnesses.sh /app/scripts/
-COPY scripts/generate-proofs.sh /app/scripts/
-COPY scripts/verify-proofs.sh /app/scripts/
-COPY scripts/benchmark-gas.sh /app/scripts/
-COPY scripts/run.sh /app/scripts/
-
-# Make scripts executable
-RUN chmod +x \
-    /app/scripts/install-deps.sh \
-    /app/scripts/compile-circuit.sh \
-    /app/scripts/trusted-setup.sh \
-    /app/scripts/compute-witnesses.sh \
-    /app/scripts/generate-proofs.sh \
-    /app/scripts/verify-proofs.sh \
-    /app/scripts/benchmark-gas.sh \
-    /app/scripts/run.sh
+COPY scripts /app/scripts
 
 # Default command to run setup and compilation
 ENTRYPOINT ["/app/scripts/run.sh"]

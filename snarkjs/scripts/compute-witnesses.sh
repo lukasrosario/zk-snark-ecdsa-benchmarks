@@ -72,12 +72,7 @@ hyperfine --min-runs 1 --max-runs 1 \
     --export-json /out/benchmarks/all_witnesses_benchmark.json \
     --export-markdown /out/benchmarks/witnesses_summary.md \
     'node /out/compilation/circuit_js/generate_witness.js /out/compilation/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json /out/witnesses/witness_{test_case}.wtns'
-
-
 echo "✅ All witnesses computed successfully!"
-
-# Calculate and display aggregate statistics
-echo ""
 echo "📈 Aggregate Statistics:"
 echo "----------------------------------------"
 
