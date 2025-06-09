@@ -14,6 +14,7 @@ print_message() {
 }
 
 # Debug environment
+print_message "$CYAN" "🚀 Starting Noir ECDSA benchmark setup..."
 print_message "$CYAN" "Current PATH: $PATH"
 print_message "$CYAN" "Checking for bb command..."
 if command -v bb &> /dev/null; then
@@ -34,20 +35,23 @@ if [ -f "$HOME/.bb/env" ]; then
   print_message "$CYAN" "Updated PATH: $PATH"
 fi
 
-print_message "$CYAN" "Running all Noir ECDSA benchmark steps..."
-
 SCRIPT_DIR="$(dirname "$0")"
 
-print_message "$CYAN" "[2/4] Compiling circuit and generating witnesses..."
+# Step 1: Compile circuit and generate witnesses
+print_message "$CYAN" "🔨 [1/4] Compiling circuit and generating witnesses..."
 bash "$SCRIPT_DIR/compile-and-generate-witness.sh"
 
-print_message "$CYAN" "[3/4] Generating proofs..."
+# Step 2: Generate proofs
+print_message "$CYAN" "🔐 [2/4] Generating proofs..."
 bash "$SCRIPT_DIR/generate-proofs.sh"
 
-print_message "$CYAN" "[5/5] Verifying proofs..."
+# Step 3: Verify proofs
+print_message "$CYAN" "🔍 [3/4] Verifying proofs..."
 bash "$SCRIPT_DIR/verify-proofs.sh"
 
-print_message "$CYAN" "[6/6] Benchmarking gas usage..."
+# Step 4: Benchmark gas usage
+print_message "$CYAN" "⛽ [4/4] Benchmarking gas usage..."
 bash "$SCRIPT_DIR/benchmark-gas.sh"
 
-print_message "$GREEN" "All Noir ECDSA benchmark steps completed successfully!" 
+print_message "$GREEN" "✅ All Noir ECDSA benchmark steps completed successfully!"
+print_message "$GREEN" "📁 Check the /out directory for all artifacts and benchmarks." 
