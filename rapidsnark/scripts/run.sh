@@ -3,44 +3,7 @@
 # Exit on error
 set -e
 
-# Parse command line arguments
-LOCAL_DEV=false
-for arg in "$@"; do
-  case $arg in
-    --local)
-      LOCAL_DEV=true
-      shift # Remove --local from processing
-      ;;
-    *)
-      # Unknown option
-      ;;
-  esac
-done
-
-TESTS_DIR="$(dirname "$0")/../tests"
-
-
 echo "🚀 Starting ECDSA SNARK benchmark setup..."
-
-# Install dependencies
-echo "📦 Installing dependencies..."
-
-# Count the number of test case files in the tests directory
-NUM_TEST_CASES=$(ls -1  $TESTS_DIR/test_case_*.json 2>/dev/null | wc -l)
-if [ "$NUM_TEST_CASES" -eq 0 ]; then
-  echo "⚠️  Warning: No test case files found in tests/ directory"
-  NUM_TEST_CASES=0  # Default fallback
-else
-  echo "📊 Found $NUM_TEST_CASES test case files in tests/ directory"
-fi
-
-if [ "$LOCAL_DEV" = true ]; then
-  echo "🔧 Local development environment detected, using setup-dependencies.sh..."
-  ./scripts/setup-dependencies.sh
-fi
-
-echo "🐳 Installing dependecies..."
-./scripts/install-deps.sh
 
 # Compile circuit
 echo "🔨 Compiling circuit..."
