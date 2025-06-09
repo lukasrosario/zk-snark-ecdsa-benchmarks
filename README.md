@@ -38,17 +38,17 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
    cd zk-snark-ecdsa-benchmarks
    ```
 
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
+2. [Install Cargo/Rust](https://www.rust-lang.org/tools/install)
+  ```
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
 
 ## Generating Test Cases
 
 The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing both implementations:
 
 ```bash
-bun run tests:generate --num-test-cases=10
+cargo run --bin generate_test_cases -- --num-test-cases 10
 ```
 
 This command:
@@ -60,7 +60,7 @@ This command:
 
 ### Command line options:
 
-- `--num-test-cases`: Number of test cases to generate (default: 10)
+- `--num-test-cases` or `-n`: Number of test cases to generate (default: 10)
 
 ## Running Benchmarks
 
