@@ -1,190 +1,47 @@
 fn main(
-    hashed_message: pub [u8; 32],
-    pub_key_x: pub [u8; 32],
-    pub_key_y: pub [u8; 32],
-    signature: pub [u8; 64],
+    hashed_message: pub [Field; 2],
+    pub_key_x: pub [Field; 2],
+    pub_key_y: pub [Field; 2],
+    signature_r: pub [Field; 2],
+    signature_s: pub [Field; 2],
 ) {
+    // Unpack field arrays back to 32-byte arrays (reverse of pack_bytes)
+    let hashed_message_bytes = unpack_fields_to_32_bytes(hashed_message);
+    let pub_key_x_bytes = unpack_fields_to_32_bytes(pub_key_x);
+    let pub_key_y_bytes = unpack_fields_to_32_bytes(pub_key_y);
+    let signature_r_bytes = unpack_fields_to_32_bytes(signature_r);
+    let signature_s_bytes = unpack_fields_to_32_bytes(signature_s);
+    
+    // Combine r and s into signature array
+    let mut signature: [u8; 64] = [0; 64];
+    for i in 0..32 {
+        signature[i] = signature_r_bytes[i];
+        signature[i + 32] = signature_s_bytes[i];
+    }
+    
     let valid = std::ecdsa_secp256r1::verify_signature(
-        pub_key_x,
-        pub_key_y,
+        pub_key_x_bytes,
+        pub_key_y_bytes,
         signature,
-        hashed_message
+        hashed_message_bytes
     );
     assert(valid);
 }
 
-#[test]
-fn test_main() {
-
-    let hashed_message = [
-    100,
-    236,
-    136,
-    202,
-    0,
-    178,
-    104,
-    229,
-    186,
-    26,
-    53,
-    103,
-    138,
-    27,
-    83,
-    22,
-    210,
-    18,
-    244,
-    243,
-    102,
-    178,
-    71,
-    114,
-    50,
-    83,
-    74,
-    138,
-    236,
-    163,
-    127,
-    60
-];
-let pub_key_x = [
-    215,
-    20,
-    197,
-    183,
-    251,
-    132,
-    86,
-    169,
-    255,
-    35,
-    86,
-    246,
-    21,
-    222,
-    34,
-    92,
-    191,
-    172,
-    191,
-    161,
-    163,
-    204,
-    36,
-    141,
-    30,
-    29,
-    25,
-    62,
-    11,
-    51,
-    249,
-    10
-];
-let pub_key_y = [
-    168,
-    82,
-    177,
-    82,
-    238,
-    60,
-    44,
-    214,
-    26,
-    171,
-    18,
-    163,
-    238,
-    117,
-    229,
-    146,
-    78,
-    143,
-    166,
-    14,
-    19,
-    140,
-    148,
-    150,
-    78,
-    74,
-    187,
-    247,
-    188,
-    108,
-    16,
-    151
-];
-let signature = [
-    127,
-    89,
-    255,
-    223,
-    175,
-    164,
-    106,
-    54,
-    212,
-    50,
-    103,
-    134,
-    196,
-    138,
-    182,
-    252,
-    207,
-    53,
-    182,
-    122,
-    56,
-    45,
-    35,
-    165,
-    253,
-    190,
-    89,
-    87,
-    151,
-    166,
-    196,
-    220,
-    85,
-    145,
-    63,
-    125,
-    102,
-    212,
-    232,
-    12,
-    87,
-    133,
-    182,
-    194,
-    17,
-    160,
-    16,
-    121,
-    4,
-    91,
-    130,
-    131,
-    237,
-    27,
-    153,
-    31,
-    239,
-    157,
-    150,
-    146,
-    25,
-    43,
-    147,
-    178
-];
-
-
-    main(hashed_message, pub_key_x, pub_key_y, signature);
+// Unpack field array back to 32-byte array (reverse of pack_bytes)
+// Assumes input is 2 field elements: [31 bytes, 1 byte padded]
+fn unpack_fields_to_32_bytes(fields: [Field; 2]) -> [u8; 32] {
+    let mut result: [u8; 32] = [0; 32];
+    
+    // First field contains bytes 0-30 (31 bytes)
+    let first_chunk_bytes: [u8; 32] = fields[0].to_le_bytes();
+    for i in 0..31 {
+        result[i] = first_chunk_bytes[i]; // Take bytes 0-30 (little-endian order)
+    }
+    
+    // Second field contains byte 31 (1 byte, with padding)
+    let second_chunk_bytes: [u8; 32] = fields[1].to_le_bytes();
+    result[31] = second_chunk_bytes[0]; // Take the first byte (least significant in little-endian)
+    
+    result
 }

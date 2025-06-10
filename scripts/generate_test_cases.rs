@@ -25,6 +25,39 @@ struct SnarkjsTestCase {
     pubkey: Vec<Vec<String>>,
 }
 
+/// Pack bytes into Field elements (implements the same logic as Noir's pack_bytes)
+/// Splits input into 31-byte chunks and converts each to a Field element
+fn pack_bytes(bytes: &[u8]) -> Vec<String> {
+    let n = bytes.len();
+    let num_chunks = n / 31 + 1; // Matches Noir's N / 31 + 1
+    
+    // Pad bytes to (num_chunks * 31) length - matches Noir's pad_end
+    let padded_len = num_chunks * 31;
+    let mut bytes_padded = bytes.to_vec();
+    bytes_padded.resize(padded_len, 0);
+    
+    let mut result = Vec::new();
+    
+    // Process each 31-byte chunk
+    for i in 0..num_chunks {
+        let start = i * 31;
+        let chunk = &bytes_padded[start..start + 31];
+        
+        // Convert chunk to field using little-endian (matches Noir's field_from_bytes)
+        let mut field_value = BigUint::from(0u32);
+        let mut offset = BigUint::from(1u32);
+        
+        for &byte in chunk {
+            field_value += BigUint::from(byte) * &offset;
+            offset *= 256u32;
+        }
+        
+        result.push(field_value.to_string());
+    }
+    
+    result
+}
+
 /// Normalize s value according to BIP-0062
 fn normalize_s(s: &[u8]) -> Vec<u8> {
     let n = BigUint::from_bytes_be(&[
@@ -68,41 +101,45 @@ fn bytes_to_bigint(bytes: &[u8]) -> BigUint {
     BigUint::from_bytes_be(bytes)
 }
 
-/// Format bytes for Noir TOML format
-fn format_bytes_for_toml(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|b| b.to_string())
-        .collect::<Vec<String>>()
-        .join(",\n    ")
-}
-
-/// Generate Noir test case in TOML format
+/// Generate Noir test case in TOML format with both byte arrays and Field values
 fn generate_noir_toml(
     hashed_message: &[u8],
     pub_key_x: &[u8],
     pub_key_y: &[u8],
     signature: &[u8],
 ) -> String {
+    // Generate Field values using pack_bytes (matches Noir's pack_bytes logic)
+    let hashed_message_fields = pack_bytes(hashed_message);
+    let pub_key_x_fields = pack_bytes(pub_key_x);
+    let pub_key_y_fields = pack_bytes(pub_key_y);
+    let signature_r_fields = pack_bytes(&signature[0..32]);
+    let signature_s_fields = pack_bytes(&signature[32..64]);
+    
+    // Helper function to format field array for TOML
+    let format_field_array = |fields: &Vec<String>| -> String {
+        if fields.len() == 1 {
+            format!("\"{}\"", fields[0])
+        } else {
+            let quoted_fields: Vec<String> = fields.iter().map(|f| format!("\"{}\"", f)).collect();
+            format!("[{}]", quoted_fields.join(", "))
+        }
+    };
+    
     format!(
-        r#"hashed_message = [
-    {}
-]
-pub_key_x = [
-    {}
-]
-pub_key_y = [
-    {}
-]
-signature = [
-    {}
-]"#,
-        format_bytes_for_toml(hashed_message),
-        format_bytes_for_toml(pub_key_x),
-        format_bytes_for_toml(pub_key_y),
-        format_bytes_for_toml(signature)
+        r#"# Field values (matching Noir's pack_bytes - 31-byte chunks)
+hashed_message = {}
+pub_key_x = {}
+pub_key_y = {}
+signature_r = {}
+signature_s = {}
+"#,
+        format_field_array(&hashed_message_fields),
+        format_field_array(&pub_key_x_fields),
+        format_field_array(&pub_key_y_fields),
+        format_field_array(&signature_r_fields),
+        format_field_array(&signature_s_fields),
     )
 }
-
 
 /// Ensure a directory exists, creating it if necessary
 fn ensure_directory_exists(dir_path: &Path) {
