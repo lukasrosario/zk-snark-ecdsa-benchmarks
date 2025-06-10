@@ -54,6 +54,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     jq \
     xxd \
+    bc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy necessary binaries and directories from builder
@@ -66,8 +67,14 @@ COPY --from=builder /root/.foundry/ /root/.foundry/
 # Set environment variables
 ENV PATH="/root/.cargo/bin:/root/.nargo/bin:/root/.bb:/root/.foundry/bin:${PATH}"
 
+# Set working directory
+WORKDIR /app
+
 # Copy Noir project files
 COPY . /app
+
+# Create persistent data directory
+RUN mkdir -p /out
 
 # Default command to run setup and benchmarks
 ENTRYPOINT ["/app/scripts/run.sh"] 

@@ -70,16 +70,12 @@ You can run benchmarks for both implementations using Docker. This ensures a con
 
 ### SnarkJS Benchmarks
 
-For **resumable execution** (recommended for long-running benchmarks):
-
 ```bash
 cd snarkjs
 # Create persistent directory for all outputs
 mkdir -p data
-
 docker build -t zk-ecdsa-snarkjs .
 cd ..
-
 docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
   -v $(pwd)/snarkjs/data:/out \
   --name zk-ecdsa-snarkjs-benchmark \
@@ -104,20 +100,19 @@ docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
 
 ### Noir Benchmarks
 
+
 ```bash
 cd noir
+mkdir -p data
+
 docker build -t zk-ecdsa-noir .
 cd ..
-docker run -v $(pwd)/tests:/app/tests -v $(pwd)/benchmarks:/app/benchmarks zk-ecdsa-noir
+
+docker run -v $(pwd)/noir/tests:/app/tests \
+  -v $(pwd)/noir/data:/out \
+  --name zk-ecdsa-noir-benchmark \
+  zk-ecdsa-noir
 ```
-
-The Noir benchmarking process:
-1. Installs Noir (nargo) and Barretenberg (bb) dependencies
-2. Compiles the Noir ECDSA circuit and generates witnesses for each test case
-3. Generates zk-SNARK proofs for each witness
-4. Verifies the generated proofs
-
-After running the benchmarks, results and artifacts will be available in the `noir/target` directory, organized by test case.
 
 ## Understanding Test Case Structure
 
@@ -146,11 +141,20 @@ Example test case format:
 
 After running the benchmarks, you'll find the results in:
 
-- `snarkjs/benchmarks/`: Contains proving time, verification time, and gas cost reports for snarkjs
-- `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark
-- `noir/target/`: Contains witness files, proofs, and verification keys for the Noir implementation
+- `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs (resumable execution)
+- `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
+- `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir (resumable execution)
 
-You can compare these results to determine which implementation performs better for your specific use case.
+### Circuit Compatibility
+
+All three implementations now use **matching public input structures** for fair comparison:
+
+**Public Inputs (visible to verifier):**
+- **Message hash**: The hash of the message that was signed
+- **Public key**: The signer's public key (x, y coordinates)  
+- **Signature**: The ECDSA signature components (r, s)
+
+This allows proving that a given signature is valid for the specified message hash and public key, making the benchmark results directly comparable between snarkjs, rapidsnark, and Noir implementations.
 
 ## Project Structure
 
