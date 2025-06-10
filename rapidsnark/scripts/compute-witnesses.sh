@@ -9,11 +9,38 @@ echo "🧮 Computing witnesses for all test cases..."
 mkdir -p /out/witnesses
 mkdir -p /out/benchmarks
 
-# Discover test cases from tests directory
-TEST_CASE_FILES=(./tests/test_case_*.json)
-if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
-    echo "❌ No test case files found in tests directory!"
-    echo "   Expected files like: test_case_1.json, test_case_2.json, etc."
+# Debug: Show current working directory and file listing
+echo "🔍 Debug: Current working directory: $(pwd)"
+echo "🔍 Debug: Contents of current directory:"
+ls -la
+echo "🔍 Debug: Contents of tests directory (if exists):"
+if [ -d "./tests" ]; then
+    ls -la ./tests/
+else
+    echo "   tests directory not found in current location"
+fi
+
+# Try different possible paths for test files
+TEST_CASE_FILES=()
+for path in "./tests/test_case_*.json" "/app/tests/test_case_*.json" "tests/test_case_*.json"; do
+    echo "🔍 Debug: Checking path: $path"
+    files=(${path})
+    if [ -e "${files[0]}" ]; then
+        TEST_CASE_FILES=("${files[@]}")
+        echo "✅ Found test files at: $path"
+        break
+    fi
+done
+
+if [ ${#TEST_CASE_FILES[@]} -eq 0 ]; then
+    echo "❌ No test case files found in any expected location!"
+    echo "   Tried paths:"
+    echo "   - ./tests/test_case_*.json"
+    echo "   - /app/tests/test_case_*.json" 
+    echo "   - tests/test_case_*.json"
+    echo "   Current working directory: $(pwd)"
+    echo "   Available directories:"
+    find . -name "tests" -type d 2>/dev/null || echo "   No 'tests' directories found"
     exit 1
 fi
 

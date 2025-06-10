@@ -96,6 +96,11 @@ fn bigint_to_chunks(x: BigUint) -> Vec<String> {
     chunks
 }
 
+/// Convert BigUint to hex string (for gnark)
+fn bigint_to_hex(x: BigUint) -> String {
+    format!("0x{}", x.to_str_radix(16))
+}
+
 /// Convert bytes to BigUint
 fn bytes_to_bigint(bytes: &[u8]) -> BigUint {
     BigUint::from_bytes_be(bytes)
@@ -167,9 +172,10 @@ fn main() {
     let snarkjs_tests_dir = Path::new("snarkjs").join("tests");
     let rapidsnark_tests_dir = Path::new("rapidsnark").join("tests");
     let noir_tests_dir = Path::new("noir").join("tests");
+    let gnark_tests_dir = Path::new("gnark").join("tests");
 
     // Clean existing directories
-    for dir in [&snarkjs_tests_dir, &rapidsnark_tests_dir, &noir_tests_dir] {
+    for dir in [&snarkjs_tests_dir, &rapidsnark_tests_dir, &noir_tests_dir, &gnark_tests_dir] {
         delete_directory_if_exists(dir);
         ensure_directory_exists(dir);
     }
@@ -207,15 +213,15 @@ fn main() {
         let pubkey_x_bigint = bytes_to_bigint(pubkey_x);
         let pubkey_y_bigint = bytes_to_bigint(pubkey_y);
         
-        // Convert BigUints to chunks
-        let r_chunks = bigint_to_chunks(r_bigint);
-        let s_chunks = bigint_to_chunks(s_bigint);
-        let msghash_chunks = bigint_to_chunks(msghash_bigint);
-        let pubkey_x_chunks = bigint_to_chunks(pubkey_x_bigint);
-        let pubkey_y_chunks = bigint_to_chunks(pubkey_y_bigint);
+        // Convert BigUints to chunks for snarkjs/rapidsnark
+        let r_chunks = bigint_to_chunks(r_bigint.clone());
+        let s_chunks = bigint_to_chunks(s_bigint.clone());
+        let msghash_chunks = bigint_to_chunks(msghash_bigint.clone());
+        let pubkey_x_chunks = bigint_to_chunks(pubkey_x_bigint.clone());
+        let pubkey_y_chunks = bigint_to_chunks(pubkey_y_bigint.clone());
         
         // Create SnarkJS/Rapidsnark test case with chunked values
-        let test_case = SnarkjsTestCase {
+        let snarkjs_test_case = SnarkjsTestCase {
             r: r_chunks,
             s: s_chunks,
             msghash: msghash_chunks,
@@ -225,18 +231,31 @@ fn main() {
             ],
         };
 
+        // Create gnark test case with hex strings
+        let gnark_test_case = GnarkTestCase {
+            r: bigint_to_hex(r_bigint),
+            s: bigint_to_hex(s_bigint),
+            msghash: bigint_to_hex(msghash_bigint),
+            pubkey_x: bigint_to_hex(pubkey_x_bigint),
+            pubkey_y: bigint_to_hex(pubkey_y_bigint),
+        };
+
         // Save SnarkJS/Rapidsnark test cases
-        let json = serde_json::to_string_pretty(&test_case)
-            .expect("Failed to serialize test case");
-        
-        // Verify the serialization format (uncomment for debugging)
-        // println!("Serialized test case: {}", json);
+        let snarkjs_json = serde_json::to_string_pretty(&snarkjs_test_case)
+            .expect("Failed to serialize snarkjs test case");
         
         for dir in &[&snarkjs_tests_dir, &rapidsnark_tests_dir] {
             let file_path = dir.join(format!("test_case_{}.json", i + 1));
-            fs::write(&file_path, &json)
+            fs::write(&file_path, &snarkjs_json)
                 .expect("Failed to write test case file");
         }
+        
+        // Save gnark test case
+        let gnark_json = serde_json::to_string_pretty(&gnark_test_case)
+            .expect("Failed to serialize gnark test case");
+        let gnark_file_path = gnark_tests_dir.join(format!("test_case_{}.json", i + 1));
+        fs::write(&gnark_file_path, gnark_json)
+            .expect("Failed to write gnark test case");
         
         // Create and save Noir test case
         let noir_test = generate_noir_toml(
@@ -251,8 +270,9 @@ fn main() {
             .expect("Failed to write Noir test case");
     }
 
-    println!("Test cases generated successfully for SnarkJS, Rapidsnark, and Noir!");
+    println!("Test cases generated successfully for SnarkJS, Rapidsnark, Noir, and gnark!");
     println!("Files are saved with 6 chunks of 43 bits each for snarkjs/rapidsnark.");
+    println!("Hex strings are used for gnark (native big integer format).");
 
     // Print sample case details for verification
     if args.num_test_cases > 0 {
@@ -265,5 +285,6 @@ fn main() {
         println!("  - {} (6 chunks of 43 bits)", snarkjs_tests_dir.display());
         println!("  - {} (6 chunks of 43 bits)", rapidsnark_tests_dir.display());
         println!("  - {} (TOML format)", noir_tests_dir.display());
+        println!("  - {} (hex strings)", gnark_tests_dir.display());
     }
 }
