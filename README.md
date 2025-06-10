@@ -96,6 +96,7 @@ docker build -t zk-ecdsa-rapidsnark .
 cd ..
 
 docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
+  -v $(pwd)/rapidsnark/tests:/app/tests \
   -v $(pwd)/rapidsnark/data:/out \
   --name zk-ecdsa-rapidsnark-benchmark \
   zk-ecdsa-rapidsnark
