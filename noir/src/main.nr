@@ -1,8 +1,8 @@
 fn main(
-    hashed_message: [u8; 32],
-    pub_key_x: [u8; 32],
-    pub_key_y: [u8; 32],
-    signature: [u8; 64],
+    hashed_message: pub [u8; 32],
+    pub_key_x: pub [u8; 32],
+    pub_key_y: pub [u8; 32],
+    signature: pub [u8; 64],
 ) {
     let valid = std::ecdsa_secp256r1::verify_signature(
         pub_key_x,
