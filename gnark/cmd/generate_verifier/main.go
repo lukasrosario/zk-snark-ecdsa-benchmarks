@@ -1,68 +1,45 @@
 package main
 
 import (
+	"crypto/sha256"
 	"log"
 	"os"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"
+	"github.com/consensys/gnark/backend/solidity"
 )
 
 func main() {
-	// Load verifying key (adjust path since we're calling from gas-bench subdirectory)
+	// Load verifying key generated during setup step
 	vk := groth16.NewVerifyingKey(ecc.BN254)
-	f, err := os.Open("../data/verifying.key")
+	file, err := os.Open("../data/verifying.key")
 	if err != nil {
-		log.Fatal("Failed to open verifying key file:", err)
+		log.Fatal("Failed to open verifying.key:", err)
 	}
-	defer f.Close()
-	_, err = vk.ReadFrom(f)
+	_, err = vk.ReadFrom(file)
+	file.Close()
 	if err != nil {
 		log.Fatal("Failed to read verifying key:", err)
 	}
 
-	// Generate Solidity verifier using gnark's built-in functionality
-	// For now, we'll create a simple template-based verifier
-	solidityTemplate := `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract Groth16Verifier {
-    struct VerifyingKey {
-        // Simplified structure for P-256 verification
-        uint256[2] alpha;
-        uint256[2][2] beta;
-        uint256[2][2] gamma;
-        uint256[2][2] delta;
-        uint256[2][] ic;
-    }
-    
-    struct Proof {
-        uint256[2] a;
-        uint256[2] b;
-        uint256[2] c;
-    }
-    
-    function verifyProof(
-        uint256[2] memory a,
-        uint256[2][2] memory b,
-        uint256[2] memory c,
-        uint256[] memory publicInputs
-    ) public pure returns (bool) {
-        // Simplified verification - in practice this would use pairing operations
-        // This is a placeholder for gas estimation purposes
-        return true;
-    }
-}`
-
-	// Write to file (adjust path since we're calling from gas-bench subdirectory)
+	// Ensure src directory exists
 	err = os.MkdirAll("src", 0755)
 	if err != nil {
-		log.Fatal("Failed to create directory:", err)
+		log.Fatal("Failed to create src directory:", err)
 	}
 
-	err = os.WriteFile("src/Groth16Verifier.sol", []byte(solidityTemplate), 0644)
+	// Create output file for the Solidity verifier
+	solidityFile, err := os.Create("src/Groth16Verifier.sol")
 	if err != nil {
-		log.Fatal("Failed to write Solidity verifier:", err)
+		log.Fatal("Failed to create Solidity verifier file:", err)
+	}
+	defer solidityFile.Close()
+
+	// Use gnark's built-in ExportSolidity method to generate the proper verifier
+	err = vk.ExportSolidity(solidityFile, solidity.WithHashToFieldFunction(sha256.New()))
+	if err != nil {
+		log.Fatal("Failed to export Solidity verifier:", err)
 	}
 
 	log.Println("✓ Solidity verifier generated successfully")

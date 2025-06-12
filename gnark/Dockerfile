@@ -16,10 +16,15 @@ RUN ARCH=$(dpkg --print-architecture) && \
     dpkg -i hyperfine_1.18.0_${ARCH}.deb && \
     rm hyperfine_1.18.0_${ARCH}.deb
 
-# Install Foundry for gas benchmarking
+# Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /root/.foundry/bin/foundryup -C d484a00089d789a19e2e43e63bbb3f1500eb2cbf
+
+# Add Foundry binaries to PATH
 ENV PATH="/root/.foundry/bin:${PATH}"
-RUN bash -c "source ~/.bashrc && foundryup"
+
+# Verify forge installation
+RUN forge --version
 
 # Set the working directory
 WORKDIR /app

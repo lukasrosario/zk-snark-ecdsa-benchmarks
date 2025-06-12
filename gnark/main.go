@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"crypto/sha256"
+
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/groth16"
 	"github.com/consensys/gnark/backend/witness"
 	"github.com/consensys/gnark/frontend"
@@ -184,7 +187,7 @@ func generateProofs() {
 
 		// Generate proof
 		start := time.Now()
-		proof, err := groth16.Prove(ccs, pk, witness)
+		proof, err := groth16.Prove(ccs, pk, witness, backend.WithProverHashToFieldFunction(sha256.New()))
 		provingTime := time.Since(start)
 
 		if err != nil {
@@ -282,7 +285,7 @@ func verifyProofs() {
 
 		// Verify proof
 		start := time.Now()
-		err = groth16.Verify(proof, vk, publicWitness)
+		err = groth16.Verify(proof, vk, publicWitness, backend.WithVerifierHashToFieldFunction(sha256.New()))
 		verifyTime := time.Since(start)
 
 		if err != nil {
@@ -423,7 +426,7 @@ func generateSingleProof(testCaseFile string) {
 	}
 
 	// Generate proof
-	proof, err := groth16.Prove(ccs, pk, witness)
+	proof, err := groth16.Prove(ccs, pk, witness, backend.WithProverHashToFieldFunction(sha256.New()))
 	if err != nil {
 		log.Fatal("Failed to generate proof:", err)
 	}
@@ -500,7 +503,7 @@ func verifySingleProof(testCaseFile string) {
 	}
 
 	// Verify proof
-	err = groth16.Verify(proof, vk, publicWitness)
+	err = groth16.Verify(proof, vk, publicWitness, backend.WithVerifierHashToFieldFunction(sha256.New()))
 	if err != nil {
 		log.Fatal("Proof verification failed:", err)
 	}
