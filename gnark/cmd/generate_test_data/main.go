@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
 	"os"
@@ -28,13 +27,12 @@ type TestCase struct {
 	PubKeyY string `json:"pubkey_y"`
 }
 
-// Use the ACTUAL circuit structure with real ECDSA verification
 type ECDSACircuit struct {
-	R       emulated.Element[emulated.P256Fr] `gnark:",secret"`
-	S       emulated.Element[emulated.P256Fr] `gnark:",secret"`
-	MsgHash emulated.Element[emulated.P256Fr] `gnark:",secret"`
-	PubKeyX emulated.Element[emulated.P256Fp] `gnark:",public"`
-	PubKeyY emulated.Element[emulated.P256Fp] `gnark:",public"`
+	R       emulated.Element[emulated.P256Fr] `gnark:",public"`
+	S       emulated.Element[emulated.P256Fr] `gnark:",public"`
+	MsgHash emulated.Element[emulated.P256Fr] `gnark:",public"`
+	PubKeyX emulated.Element[emulated.P256Fp] `gnark:",secret"`
+	PubKeyY emulated.Element[emulated.P256Fp] `gnark:",secret"`
 }
 
 func (circuit *ECDSACircuit) Define(api frontend.API) error {
@@ -69,7 +67,7 @@ func main() {
 	proofFile := os.Args[3]
 
 	// Load test case to get inputs
-	testCaseData, err := ioutil.ReadFile(testCaseFile)
+	testCaseData, err := os.ReadFile(testCaseFile)
 	if err != nil {
 		log.Fatal("Failed to read test case file:", err)
 	}
@@ -79,8 +77,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to parse test case:", err)
 	}
-
-	log.Printf("Loading VALID proof and extracting components for test case %s", testCaseNum)
 
 	// Load the existing valid proof from the .groth16 file
 	proof := groth16.NewProof(ecc.BN254)
@@ -113,18 +109,10 @@ func main() {
 		log.Fatal("Failed to extract public values from witness")
 	}
 
-	if len(publicValues) != 8 {
-		log.Printf("WARNING: Expected 8 public inputs but got %d", len(publicValues))
+	if len(publicValues) != 12 {
+		log.Printf("WARNING: Expected 12 public inputs but got %d", len(publicValues))
 	}
 
-	log.Printf("Public witness has %d values", len(publicValues))
-	for i, val := range publicValues {
-		if i < 8 { // Show all values since we need exactly 8
-			log.Printf("  [%d]: %s (hex: 0x%s)", i, val.String(), val.Text(16))
-		}
-	}
-
-	// Extract REAL proof components using reflection (from the existing valid proof)
 	components, err := extractProofComponents(proof)
 	if err != nil {
 		log.Fatal("Failed to extract proof components:", err)
@@ -187,13 +175,13 @@ func main() {
         commitmentPok[0] = 0x%s;
         commitmentPok[1] = 0x%s;
 
-        uint256[8] memory input;`,
+        uint256[12] memory input;`,
 		testCaseNum,
 		components[0], components[1], components[3], components[2], components[5], components[4], components[6], components[7],
 		commitments[0], commitments[1], commitmentPokVals[0], commitmentPokVals[1])
 
 	// Add the real public inputs
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 12; i++ {
 		hexVal := "0"
 		if i < len(publicValues) {
 			hexVal = formatFieldElement(publicValues[i].String())
@@ -204,7 +192,7 @@ func main() {
 
 	// Read the test file template
 	testFilePath := fmt.Sprintf("test/GasTest%s.t.sol", testCaseNum)
-	content, err := ioutil.ReadFile(testFilePath)
+	content, err := os.ReadFile(testFilePath)
 	if err != nil {
 		log.Fatal("Failed to read test file:", err)
 	}
@@ -214,21 +202,13 @@ func main() {
 	updatedContent := strings.Replace(string(content), placeholder, solidityData, 1)
 
 	// Write back the updated content
-	err = ioutil.WriteFile(testFilePath, []byte(updatedContent), 0644)
+	err = os.WriteFile(testFilePath, []byte(updatedContent), 0644)
 	if err != nil {
 		log.Fatal("Failed to write updated test file:", err)
 	}
-
-	log.Printf("✓ VALID proof data extracted for test case %s", testCaseNum)
-	log.Printf("  - Using existing valid proof file")
-	log.Printf("  - Public inputs: %d values", len(publicValues))
-	log.Printf("  - All components extracted correctly")
 }
 
 func extractProofComponents(proof groth16.Proof) ([8]string, error) {
-	// Extract real proof components using reflection
-	log.Printf("Extracting REAL proof components from gnark proof...")
-
 	// Use reflection to access proof internals
 	proofValue := reflect.ValueOf(proof)
 	if proofValue.Kind() == reflect.Ptr {
@@ -241,7 +221,6 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 	arField := proofValue.FieldByName("Ar")
 	if arField.IsValid() && arField.CanInterface() {
 		arValue := arField.Interface()
-		log.Printf("Found Ar (A component): %v", arValue)
 
 		// Extract X and Y coordinates from the G1Affine point
 		arReflect := reflect.ValueOf(arValue)
@@ -250,14 +229,12 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 			xField := arReflect.Field(0)
 			if xField.IsValid() {
 				components[0] = elementToHex(xField)
-				log.Printf("  A.X = 0x%s", components[0])
 			}
 
 			// Try to get Y coordinate (index 1)
 			yField := arReflect.Field(1)
 			if yField.IsValid() {
 				components[1] = elementToHex(yField)
-				log.Printf("  A.Y = 0x%s", components[1])
 			}
 		}
 	}
@@ -266,7 +243,6 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 	bsField := proofValue.FieldByName("Bs")
 	if bsField.IsValid() && bsField.CanInterface() {
 		bsValue := bsField.Interface()
-		log.Printf("Found Bs (B component): %v", bsValue)
 
 		// G2Affine has X and Y, each with two coordinates (A0, A1)
 		bsReflect := reflect.ValueOf(bsValue)
@@ -280,13 +256,11 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 					a0Field := xStruct.Field(0)
 					if a0Field.IsValid() {
 						components[2] = elementToHex(a0Field)
-						log.Printf("  B.X.A0 = 0x%s", components[2])
 					}
 					// X.A1
 					a1Field := xStruct.Field(1)
 					if a1Field.IsValid() {
 						components[3] = elementToHex(a1Field)
-						log.Printf("  B.X.A1 = 0x%s", components[3])
 					}
 				}
 			}
@@ -300,13 +274,11 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 					a0Field := yStruct.Field(0)
 					if a0Field.IsValid() {
 						components[4] = elementToHex(a0Field)
-						log.Printf("  B.Y.A0 = 0x%s", components[4])
 					}
 					// Y.A1
 					a1Field := yStruct.Field(1)
 					if a1Field.IsValid() {
 						components[5] = elementToHex(a1Field)
-						log.Printf("  B.Y.A1 = 0x%s", components[5])
 					}
 				}
 			}
@@ -317,7 +289,6 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 	krsField := proofValue.FieldByName("Krs")
 	if krsField.IsValid() && krsField.CanInterface() {
 		krsValue := krsField.Interface()
-		log.Printf("Found Krs (C component): %v", krsValue)
 
 		// Extract X and Y coordinates
 		krsReflect := reflect.ValueOf(krsValue)
@@ -326,19 +297,15 @@ func extractProofComponents(proof groth16.Proof) ([8]string, error) {
 			xField := krsReflect.Field(0)
 			if xField.IsValid() {
 				components[6] = elementToHex(xField)
-				log.Printf("  C.X = 0x%s", components[6])
 			}
 
 			// C.Y
 			yField := krsReflect.Field(1)
 			if yField.IsValid() {
 				components[7] = elementToHex(yField)
-				log.Printf("  C.Y = 0x%s", components[7])
 			}
 		}
 	}
-
-	log.Printf("Successfully extracted REAL proof components!")
 
 	return components, nil
 }

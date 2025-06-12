@@ -162,19 +162,6 @@ mkdir -p test
 print_message "$CYAN" "🔧 Generating Solidity verifier..."
 go run ../cmd/generate_verifier/main.go
 
-# Debug: Check the actual contract name in the generated verifier
-print_message "$CYAN" "🔍 Checking verifier contract name..."
-if [ -f "src/Groth16Verifier.sol" ]; then
-    echo "Contract declarations found:"
-    grep -n "contract" src/Groth16Verifier.sol || echo "No contract declaration found"
-    echo "File size: $(wc -c < src/Groth16Verifier.sol) bytes"
-    echo ""
-    echo "VerifyProof method signature:"
-    grep -A 10 "function verifyProof" src/Groth16Verifier.sol || echo "No verifyProof function found"
-else
-    echo "Verifier file not found!"
-fi
-
 print_message "$CYAN" "🧪 Running gas benchmarks for $NUM_TEST_CASES test cases..."
 
 # Initialize results array
@@ -212,25 +199,9 @@ EOF
     # Run gas benchmark for this test case
     print_message "$CYAN" "🧪 Running gas benchmark for test case $test_case..."
     
-    # Debug: Check if the test file was created correctly
-    if [ ! -f "test/GasTest${test_case}.t.sol" ]; then
-        print_message "$RED" "Error: Test file not created for test case $test_case"
-        continue
-    fi
-    
-    # Debug: Check if the verifier contract exists
-    if [ ! -f "src/Groth16Verifier.sol" ]; then
-        print_message "$RED" "Error: Verifier contract not found"
-        continue
-    fi
-    
     print_message "$CYAN" "🔍 Building contracts..."
     if ! forge build 2>&1; then
         print_message "$RED" "Error: Failed to build contracts for test case $test_case"
-        print_message "$CYAN" "Debug: Listing test directory contents:"
-        ls -la test/
-        print_message "$CYAN" "Debug: Listing src directory contents:"
-        ls -la src/
         continue
     fi
     
@@ -240,28 +211,13 @@ EOF
         print_message "$GREEN" "✅ Test completed for test case $test_case"
     else
         print_message "$RED" "❌ Test failed or timed out for test case $test_case"
-        print_message "$CYAN" "Debug: Showing last 10 lines of gas report:"
-        tail -10 "/out/gas-reports/gas_report_${test_case}.txt" || echo "No gas report found"
     fi
     
-    # Extract gas usage from the output - try multiple patterns
-    # Look for the actual gas usage in the failure message first
     GAS_USAGE=$(grep -o "testVerifyProof${test_case}() (gas: [0-9]*)" "/out/gas-reports/gas_report_${test_case}.txt" | sed -E 's/.*\(gas: ([0-9]*)\)/\1/' | head -1 || echo "")
-    
-    # If not found in test output, try the gas report pattern
+
     if [ -z "$GAS_USAGE" ]; then
-        GAS_USAGE=$(grep -o "\[FAIL.*\] testVerifyProof${test_case}() (gas: [0-9]*)" "/out/gas-reports/gas_report_${test_case}.txt" | sed -E 's/.*\(gas: ([0-9]*)\)/\1/' | head -1 || echo "")
-    fi
-    
-    # If still not found, try any line with gas usage
-    if [ -z "$GAS_USAGE" ]; then
-        GAS_USAGE=$(grep -o "(gas: [0-9]*)" "/out/gas-reports/gas_report_${test_case}.txt" | head -1 | sed -E 's/.*\(gas: ([0-9]*)\)/\1/' || echo "")
-    fi
-    
-    # Fallback value only if absolutely nothing found
-    if [ -z "$GAS_USAGE" ]; then
-        print_message "$RED" "Could not extract gas usage, using fallback"
-        GAS_USAGE="378000"
+        print_message "$RED" "❌ Could not extract gas usage from test result for $BASENAME"
+        exit 1
     fi
     
     print_message "$GREEN" "✅ Gas usage for test case $test_case: $GAS_USAGE"

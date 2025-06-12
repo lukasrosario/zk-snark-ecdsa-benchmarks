@@ -86,7 +86,7 @@ hyperfine --min-runs 1 --max-runs 1 \
     --show-output \
     --export-json /out/benchmarks/all_verifications_benchmark.json \
     --export-markdown /out/benchmarks/verifications_summary.md \
-    'echo "Verifying {test_case}..."; go run main.go circuit.go verify tests/test_case_{test_case}.json'
+    'go run main.go circuit.go verify tests/test_case_{test_case}.json'
 
 print_message "$GREEN" "✅ All proofs verified successfully!"
 

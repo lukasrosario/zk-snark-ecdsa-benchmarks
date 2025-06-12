@@ -13,14 +13,16 @@ print_message() {
   echo -e "${color}${message}${NC}"
 }
 
-print_message "$CYAN" "Starting circuit compilation and setup..."
-
 # Ensure we're in the correct directory
 cd /app
 
-# Create data directory if it doesn't exist
-mkdir -p data
-mkdir -p /out
+print_message "$CYAN" "🔨 [1/4] Compiling circuit..."
+
+# Check if compilation already done
+if [ -f "/out/circuit.r1cs" ] && [ -f "/out/proving.key" ]; then
+    print_message "$GREEN" "✅ Circuit already compiled. Skipping."
+    exit 0
+fi
 
 # Compile the circuit and run setup
 print_message "$CYAN" "Compiling ECDSA circuit..."
@@ -28,12 +30,12 @@ go run main.go circuit.go compile
 
 # Check if circuit files were created
 if [ ! -f "data/circuit.r1cs" ] || [ ! -f "data/proving.key" ] || [ ! -f "data/verifying.key" ]; then
-    print_message "$RED" "Circuit compilation failed - missing required files!"
+    print_message "$RED" "❌ Circuit compilation failed. Files not found."
     exit 1
 fi
 
-# Copy circuit files to output directory for persistence
-cp -r data/* /out/
+print_message "$GREEN" "✅ Circuit compiled and setup complete."
+print_message "$CYAN" "   Artifacts saved to /out/"
 
-print_message "$GREEN" "Circuit compilation and setup completed successfully!"
-print_message "$CYAN" "Circuit files saved to data/ and /out/ directories." 
+# Copy artifacts to /out directory
+cp data/circuit.r1cs data/proving.key data/verifying.key /out/ 

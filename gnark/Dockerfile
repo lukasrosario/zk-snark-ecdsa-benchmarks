@@ -16,6 +16,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
     dpkg -i hyperfine_1.18.0_${ARCH}.deb && \
     rm hyperfine_1.18.0_${ARCH}.deb
 
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
 RUN /root/.foundry/bin/foundryup -C d484a00089d789a19e2e43e63bbb3f1500eb2cbf
