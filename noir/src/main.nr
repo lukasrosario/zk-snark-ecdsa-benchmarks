@@ -1,7 +1,7 @@
 fn main(
     hashed_message: pub [Field; 2],
-    pub_key_x: pub [Field; 2],
-    pub_key_y: pub [Field; 2],
+    pub_key_x: [Field; 2],
+    pub_key_y: [Field; 2],
     signature_r: pub [Field; 2],
     signature_s: pub [Field; 2],
 ) {

@@ -2,4 +2,4 @@ pragma circom 2.1.5;
 
 include "./lib/circom-ecdsa-p256/circuits/ecdsa.circom";
 
-component main { public [r, s, msghash, pubkey] } = ECDSAVerifyNoPubkeyCheck(43, 6);
+component main { public [r, s, msghash] } = ECDSAVerifyNoPubkeyCheck(43, 6);

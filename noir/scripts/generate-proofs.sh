@@ -113,5 +113,61 @@ for testcase_dir in /out/witnesses/test_case_*; do
   fi
 done
 
+# --- BENCHMARKING ---
+print_message "$CYAN" "📊 Benchmarking proof generation time..."
+
+# Discover test cases for benchmarking
+TEST_CASE_DIRS=($(find /out/witnesses -name "test_case_*" -type d | sort))
+COMMANDS=()
+for testcase_dir in "${TEST_CASE_DIRS[@]}"; do
+    BASENAME=$(basename "$testcase_dir")
+    PROOF_DIR="/out/proofs/${BASENAME}"
+    CIRCUIT_FILE="/out/compilation/benchmarking.json"
+    WITNESS_FILE=$(find "$testcase_dir" -name "*.gz" -type f)
+    
+    # Construct the command for hyperfine
+    COMMANDS+=("cd ${PROOF_DIR} && bb prove -b ${CIRCUIT_FILE} -w ${WITNESS_FILE} -o ./ --oracle_hash keccak --output_format bytes_and_fields > /dev/null 2>&1")
+done
+
+# Run hyperfine with a single run per command
+hyperfine --min-runs 1 --max-runs 1 \
+    --show-output \
+    --export-json "/out/proofs/proof_generation_benchmark.json" \
+    --export-markdown "/out/proofs/proof_generation_summary.md" \
+    --command-name "generate_proof" \
+    "${COMMANDS[@]}"
+
+# --- SUMMARY ---
 print_message "$GREEN" "✅ All proofs and verification keys generated successfully!"
 print_message "$GREEN" "📁 Proof artifacts: /out/proofs/"
+
+if [ -f "/out/proofs/proof_generation_summary.md" ]; then
+    print_message "$CYAN" "📊 Displaying benchmark results:"
+    cat "/out/proofs/proof_generation_summary.md"
+fi
+
+if [ -f "/out/proofs/proof_generation_benchmark.json" ]; then
+    print_message "$CYAN" "📈 Aggregate Statistics:"
+    print_message "$CYAN" "----------------------------------------"
+    
+    avg_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' /out/proofs/proof_generation_benchmark.json 2>/dev/null)
+    min_time=$(jq -r '[.results[].min | select(. != null)] | min' /out/proofs/proof_generation_benchmark.json 2>/dev/null)
+    max_time=$(jq -r '[.results[].max | select(. != null)] | max' /out/proofs/proof_generation_benchmark.json 2>/dev/null)
+    
+    std_dev=$(jq -r '
+        .results | 
+        map(.mean) | 
+        (add / length) as $mean |
+        map(($mean - .) * ($mean - .)) |
+        (add / length) | 
+        sqrt
+    ' /out/proofs/proof_generation_benchmark.json 2>/dev/null)
+    
+    if [[ "$avg_time" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+        printf "Average Time: %.3f ± %.3f seconds\n" "$avg_time" "$std_dev"
+        printf "Min Time: %.3f seconds\n" "$min_time"
+        printf "Max Time: %.3f seconds\n" "$max_time"
+    fi
+    
+    print_message "$CYAN" "----------------------------------------"
+fi
