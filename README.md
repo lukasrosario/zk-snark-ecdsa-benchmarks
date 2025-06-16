@@ -1,16 +1,16 @@
 # zk-SNARK ECDSA Benchmarks
 
-This repository contains a benchmarking suite for ECDSA signature verification using zero-knowledge proofs (zk-SNARKs) with [snarkjs](https://github.com/iden3/snarkjs), [rapidsnark](https://github.com/iden3/rapidsnark), and [Noir](https://noir-lang.org/) implementations. It allows you to compare performance, proving time, and gas costs between these zk-SNARK implementations.
+This repository contains a benchmarking suite for ECDSA signature verification using zero-knowledge proofs (zk-SNARKs) with [snarkjs](https://github.com/iden3/snarkjs), [rapidsnark](https://github.com/iden3/rapidsnark), [Noir](https://noir-lang.org/), and [gnark](https://github.com/Consensys/gnark) implementations. It allows you to compare performance, proving time, and gas costs between these zk-SNARK implementations.
 
 ## Project Overview
 
 zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the signature itself. This is particularly useful for blockchain applications that require privacy-preserving identity verification. This benchmark suite:
 
 1. Generates ECDSA signature test cases on the P-256 curve
-2. Compiles Circom circuits for ECDSA verification
+2. Compiles circuits for ECDSA verification (Circom for snarkjs/rapidsnark, Noir for Noir, Go for gnark)
 3. Performs trusted setup, witness computation, and proof generation
 4. Measures proving time, verification time, and gas costs
-5. Compares performance between snarkjs (JavaScript), rapidsnark (C++), and Noir implementations
+5. Compares performance between snarkjs (JavaScript), rapidsnark (C++), Noir, and gnark (Go) implementations
 
 ## Prerequisites
 
@@ -27,6 +27,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 - [snarkjs](https://github.com/iden3/snarkjs) - JavaScript implementation of zk-SNARKs
 - [rapidsnark](https://github.com/iden3/rapidsnark) - C++ implementation of zk-SNARKs
 - [Noir v1.0.0-beta.4](https://noir-lang.org/) - Rust implementation of zk-SNARKs
+- [gnark v0.12.0](https://github.com/Consensys/gnark) - Go implementation of zk-SNARKs
 - [Foundry](https://github.com/foundry-rs/foundry) - Ethereum development toolkit
 - [Hyperfine](https://github.com/sharkdp/hyperfine) - Command-line benchmarking tool
 
@@ -45,7 +46,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 
 ## Generating Test Cases
 
-The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing both implementations:
+The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing all implementations:
 
 ```bash
 bun run tests:generate --num-test-cases=10
@@ -55,8 +56,10 @@ This command:
 1. Generates random ECDSA key pairs on the P-256 curve
 2. Creates signatures for a random challenge message
 3. Formats the signatures, public keys, and message hash into the required format for zk-SNARK circuits
-4. Splits the values into 43-bit chunks (required by the circuit constraints)
-5. Saves the test cases in the `snarkjs/tests`, `rapidsnark/tests`, and `noir/tests` directories
+4. For snarkjs/rapidsnark: Splits the values into 43-bit chunks (required by the circuit constraints)
+5. For Noir: Saves as byte arrays in TOML format
+6. For gnark: Saves as hex strings for native big integer handling
+7. Saves the test cases in the respective `tests/` directories
 
 ### Command line options:
 
@@ -66,7 +69,7 @@ This command:
 
 ### NOTE: Go do docker -> Gear icon (settings) -> Resources -> Set Memory 16GB
 
-You can run benchmarks for both implementations using Docker. This ensures a consistent environment and avoids dependency conflicts.
+You can run benchmarks for all implementations using Docker. This ensures a consistent environment and avoids dependency conflicts.
 
 ### SnarkJS Benchmarks
 
@@ -93,6 +96,7 @@ docker build -t zk-ecdsa-rapidsnark .
 cd ..
 
 docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
+  -v $(pwd)/rapidsnark/tests:/app/tests \
   -v $(pwd)/rapidsnark/data:/out \
   --name zk-ecdsa-rapidsnark-benchmark \
   zk-ecdsa-rapidsnark
@@ -114,8 +118,32 @@ docker run -v $(pwd)/noir/tests:/app/tests \
   zk-ecdsa-noir
 ```
 
+### gnark Benchmarks
+
+```bash
+cd gnark
+# Create persistent directory for all outputs
+mkdir -p data
+
+docker build -t zk-ecdsa-gnark .
+cd ..
+
+docker run -v $(pwd)/gnark/tests:/app/tests \
+  -v $(pwd)/gnark/data:/out \
+  --name zk-ecdsa-gnark-benchmark \
+  zk-ecdsa-gnark
+```
+
+The gnark benchmarking process:
+1. Compiles the gnark ECDSA circuit using Go and the gnark library
+2. Runs the trusted setup phase (Groth16)
+3. Generates zk-SNARK proofs for each test case
+4. Verifies the generated proofs
+5. Measures compilation, proving, and verification times
+
 ## Understanding Test Case Structure
 
+### SnarkJS/RapidSnark Format
 Each test case includes:
 
 - **r and s components**: The two parts of an ECDSA signature, each split into 6 chunks of 43 bits
@@ -137,6 +165,19 @@ Example test case format:
 }
 ```
 
+### gnark Format
+gnark uses native big integer handling, so test cases use hex strings:
+
+```json
+{
+  "r": "0x7ff59f2af286a36d4326786c48ab6f3cf35b67a382d23a5fbe59579a6c4dc",
+  "s": "0x5591f7d661dc8232a010794b8283ed1b991fef9d96192b93b2",
+  "msghash": "0x64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8eca37f3c",
+  "pubkey_x": "0xd714c5b7fb8456a9ff2356f615de225cbfacbfa1a3cc248d1e1d193e0b33f90a",
+  "pubkey_y": "0xa852b152ee3c2cd61aab12a3ee75e5924e8fa60e138c94964e4abbf7bc6c1097"
+}
+```
+
 ## Benchmark Results
 
 After running the benchmarks, you'll find the results in:
@@ -144,6 +185,7 @@ After running the benchmarks, you'll find the results in:
 - `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs (resumable execution)
 - `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
 - `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir (resumable execution)
+- `gnark/data/`: Contains circuit files, proofs, and benchmark timing reports for gnark
 
 ### Circuit Compatibility
 
@@ -177,6 +219,13 @@ zk-snark-ecdsa-benchmarks/
 ├── noir/                       # Noir implementation
 │   ├── src/main.nr             # Noir circuit implementation
 │   ├── Nargo.toml              # Noir project configuration
+│   ├── scripts/                # Benchmark scripts
+│   └── tests/                  # Generated test cases
+├── gnark/                      # gnark implementation
+│   ├── circuit.go              # gnark circuit implementation
+│   ├── main.go                 # Main benchmarking executable
+│   ├── go.mod                  # Go module configuration
+│   ├── Dockerfile              # Docker setup for gnark
 │   ├── scripts/                # Benchmark scripts
 │   └── tests/                  # Generated test cases
 ├── package.json                # Project dependencies

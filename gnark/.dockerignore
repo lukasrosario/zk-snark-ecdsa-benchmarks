@@ -1,0 +1,4 @@
+data/
+*.proof
+*.r1cs
+*.key 
