@@ -106,12 +106,6 @@ out = "out"
 libs = ["lib"]
 solc = "0.8.20"
 remappings = ["forge-std/=lib/forge-std/src/"]
-
-[rpc_endpoints]
-mainnet = "${MAINNET_RPC_URL}"
-
-[etherscan]
-mainnet = { key = "${ETHERSCAN_API_KEY}" }
 FOUNDRY_EOF
 
     # Install forge-std

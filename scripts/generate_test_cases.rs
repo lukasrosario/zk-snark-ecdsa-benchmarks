@@ -25,6 +25,16 @@ struct SnarkjsTestCase {
     pubkey: Vec<Vec<String>>,
 }
 
+/// Test case data for gnark (uses hex strings)
+#[derive(Serialize)]
+struct GnarkTestCase {
+    r: String,
+    s: String,
+    msghash: String,
+    pubkey_x: String,
+    pubkey_y: String,
+}
+
 /// Pack bytes into Field elements (implements the same logic as Noir's pack_bytes)
 /// Splits input into 31-byte chunks and converts each to a Field element
 fn pack_bytes(bytes: &[u8]) -> Vec<String> {
