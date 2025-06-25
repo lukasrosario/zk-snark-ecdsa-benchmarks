@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -32,34 +33,43 @@ type TestCase struct {
 	PubKeyY string `json:"pubkey_y"`
 }
 
+var (
+	// command line flags
+	outputDir string
+)
+
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: go run main.go circuit.go <command> [test_case.json]\nCommands: compile, prove, verify")
+		log.Fatal("Usage: go run main.go <command> [options]\nCommands: compile, prove, verify")
 	}
 
+	// Separate command and arguments
 	command := os.Args[1]
+	args := os.Args[2:]
+
+	// Define and parse flags for the specific command
+	fs := flag.NewFlagSet(command, flag.ExitOnError)
+	fs.StringVar(&outputDir, "d", "data", "Output directory for compiled circuit and keys")
+	fs.Parse(args) // This will parse flags like -d
+
+	// The remaining non-flag arguments can be retrieved with fs.Args()
+	remainingArgs := fs.Args()
 
 	switch command {
 	case "compile":
 		compileCircuit()
 	case "prove":
-		if len(os.Args) < 3 {
-			// Batch mode - prove all test cases
-			generateProofs()
-		} else {
-			// Single test case mode
-			testCaseFile := os.Args[2]
-			generateSingleProof(testCaseFile)
+		if len(remainingArgs) == 0 {
+			log.Fatal("Missing test case file for prove command")
 		}
+		testCaseFile := remainingArgs[0]
+		generateSingleProof(testCaseFile)
 	case "verify":
-		if len(os.Args) < 3 {
-			// Batch mode - verify all proofs
-			verifyProofs()
-		} else {
-			// Single test case mode
-			testCaseFile := os.Args[2]
-			verifySingleProof(testCaseFile)
+		if len(remainingArgs) == 0 {
+			log.Fatal("Missing test case file for verify command")
 		}
+		testCaseFile := remainingArgs[0]
+		verifySingleProof(testCaseFile)
 	default:
 		log.Fatal("Unknown command. Use: compile, prove, or verify")
 	}
@@ -87,13 +97,13 @@ func compileCircuit() {
 	}
 
 	// Save the compiled circuit and keys
-	err = os.MkdirAll("data", 0755)
+	err = os.MkdirAll(outputDir, 0755)
 	if err != nil {
-		log.Fatal("Failed to create data directory:", err)
+		log.Fatal("Failed to create output directory:", err)
 	}
 
 	// Save constraint system
-	f, err := os.Create("data/circuit.r1cs")
+	f, err := os.Create(filepath.Join(outputDir, "circuit.r1cs"))
 	if err != nil {
 		log.Fatal("Failed to create circuit file:", err)
 	}
@@ -104,7 +114,7 @@ func compileCircuit() {
 	}
 
 	// Save proving key
-	f, err = os.Create("data/proving.key")
+	f, err = os.Create(filepath.Join(outputDir, "proving.key"))
 	if err != nil {
 		log.Fatal("Failed to create proving key file:", err)
 	}
@@ -115,7 +125,7 @@ func compileCircuit() {
 	}
 
 	// Save verifying key
-	f, err = os.Create("data/verifying.key")
+	f, err = os.Create(filepath.Join(outputDir, "verifying.key"))
 	if err != nil {
 		log.Fatal("Failed to create verifying key file:", err)
 	}
@@ -125,7 +135,7 @@ func compileCircuit() {
 		log.Fatal("Failed to write verifying key:", err)
 	}
 
-	fmt.Println("Setup completed. Files saved to data/ directory.")
+	fmt.Printf("Setup completed. Files saved to %s/ directory.\n", outputDir)
 }
 
 func generateProofs() {
@@ -133,7 +143,7 @@ func generateProofs() {
 
 	// Load constraint system
 	ccs := groth16.NewCS(ecc.BN254)
-	f, err := os.Open("data/circuit.r1cs")
+	f, err := os.Open(filepath.Join(outputDir, "circuit.r1cs"))
 	if err != nil {
 		log.Fatal("Failed to open circuit file:", err)
 	}
@@ -145,7 +155,7 @@ func generateProofs() {
 
 	// Load proving key
 	pk := groth16.NewProvingKey(ecc.BN254)
-	f, err = os.Open("data/proving.key")
+	f, err = os.Open(filepath.Join(outputDir, "proving.key"))
 	if err != nil {
 		log.Fatal("Failed to open proving key file:", err)
 	}
@@ -198,7 +208,7 @@ func generateProofs() {
 		// Save proof
 		baseName := filepath.Base(testFile)
 		baseName = baseName[:len(baseName)-5] // Remove .json extension
-		proofFile := filepath.Join("data", baseName+".proof")
+		proofFile := filepath.Join(outputDir, baseName+".proof")
 
 		f, err := os.Create(proofFile)
 		if err != nil {
@@ -223,7 +233,7 @@ func verifyProofs() {
 
 	// Load verifying key
 	vk := groth16.NewVerifyingKey(ecc.BN254)
-	f, err := os.Open("data/verifying.key")
+	f, err := os.Open(filepath.Join(outputDir, "verifying.key"))
 	if err != nil {
 		log.Fatal("Failed to open verifying key file:", err)
 	}
@@ -234,7 +244,7 @@ func verifyProofs() {
 	}
 
 	// Find all proof files
-	proofFiles, err := filepath.Glob("data/test_case_*.proof")
+	proofFiles, err := filepath.Glob(filepath.Join(outputDir, "test_case_*.proof"))
 	if err != nil {
 		log.Fatal("Failed to find proof files:", err)
 	}
@@ -391,7 +401,7 @@ func parseHexToBigInt(hexStr string) (*big.Int, error) {
 func generateSingleProof(testCaseFile string) {
 	// Load constraint system
 	ccs := groth16.NewCS(ecc.BN254)
-	f, err := os.Open("data/circuit.r1cs")
+	f, err := os.Open(filepath.Join(outputDir, "circuit.r1cs"))
 	if err != nil {
 		log.Fatal("Failed to open circuit file:", err)
 	}
@@ -403,7 +413,7 @@ func generateSingleProof(testCaseFile string) {
 
 	// Load proving key
 	pk := groth16.NewProvingKey(ecc.BN254)
-	f, err = os.Open("data/proving.key")
+	f, err = os.Open(filepath.Join(outputDir, "proving.key"))
 	if err != nil {
 		log.Fatal("Failed to open proving key file:", err)
 	}
@@ -441,7 +451,7 @@ func generateSingleProof(testCaseFile string) {
 	}
 
 	// Save proof
-	proofFile := filepath.Join("data", "proof_"+testCaseNum+".groth16")
+	proofFile := filepath.Join(outputDir, "proof_"+testCaseNum+".groth16")
 	f, err = os.Create(proofFile)
 	if err != nil {
 		log.Fatal("Failed to create proof file:", err)
@@ -458,7 +468,7 @@ func generateSingleProof(testCaseFile string) {
 func verifySingleProof(testCaseFile string) {
 	// Load verifying key
 	vk := groth16.NewVerifyingKey(ecc.BN254)
-	f, err := os.Open("data/verifying.key")
+	f, err := os.Open(filepath.Join(outputDir, "verifying.key"))
 	if err != nil {
 		log.Fatal("Failed to open verifying key file:", err)
 	}
@@ -490,7 +500,7 @@ func verifySingleProof(testCaseFile string) {
 	}
 
 	// Load proof
-	proofFile := filepath.Join("data", "proof_"+testCaseNum+".groth16")
+	proofFile := filepath.Join(outputDir, "proof_"+testCaseNum+".groth16")
 	proof := groth16.NewProof(ecc.BN254)
 	f, err = os.Open(proofFile)
 	if err != nil {

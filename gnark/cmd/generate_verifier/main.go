@@ -13,7 +13,7 @@ import (
 func main() {
 	// Load verifying key generated during setup step
 	vk := groth16.NewVerifyingKey(ecc.BN254)
-	file, err := os.Open("../data/verifying.key")
+	file, err := os.Open("/out/verifying.key")
 	if err != nil {
 		log.Fatal("Failed to open verifying.key:", err)
 	}

@@ -2,6 +2,13 @@
 
 set -e
 
+# Clean output directory for a fresh run
+if [ -d "/out" ]; then
+    rm -rf /out/*
+else
+    mkdir -p /out
+fi
+
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'

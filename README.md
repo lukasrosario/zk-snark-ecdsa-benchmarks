@@ -14,7 +14,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) runtime for test case generation
+- [Rust & Cargo](https://doc.rust-lang.org/cargo/) for test case generation
 - [Docker](https://www.docker.com/) for running the benchmarks in isolated environments (with 16GB memory allocated)
 - Download powers of tau
 ```bash
@@ -39,17 +39,12 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
    cd zk-snark-ecdsa-benchmarks
    ```
 
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-
 ## Generating Test Cases
 
 The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing all implementations:
 
 ```bash
-bun run tests:generate --num-test-cases=10
+cargo run --bin generate_test_cases -- --num-test-cases=10
 ```
 
 This command:

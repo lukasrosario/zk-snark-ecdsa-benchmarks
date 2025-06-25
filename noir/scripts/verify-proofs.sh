@@ -33,7 +33,14 @@ print_message "$CYAN" "🔍 Starting proof verification for Noir ECDSA test case
 # Create persistent output directories
 mkdir -p /out/verification
 
-# Count total proof directories
+# Check if proofs exist
+if [ ! -d "/out/proofs" ] || [ -z "$(find /out/proofs -name 'proof' -type f)" ]; then
+    print_message "$RED" "❌ Proofs not found in /out/proofs"
+    print_message "$RED" "   Please run the proof generation step first."
+    exit 1
+fi
+
+# Count total test cases
 TOTAL_PROOFS=$(find /out/proofs -name "test_case_*" -type d | wc -l)
 if [ "$TOTAL_PROOFS" -eq 0 ]; then
     print_message "$RED" "❌ No proof directories found in /out/proofs"

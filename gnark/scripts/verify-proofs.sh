@@ -19,7 +19,7 @@ print_message "$CYAN" "🔍 Verifying proofs for all test cases..."
 cd /app
 
 # Check if verifying key exists
-if [ ! -f "data/verifying.key" ]; then
+if [ ! -f "/out/verifying.key" ]; then
     print_message "$RED" "Verifying key not found. Please run compile-circuit.sh first."
     exit 1
 fi
@@ -46,24 +46,10 @@ unset IFS
 NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
 print_message "$CYAN" "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
 
-# Check if verification already completed
-if [ -f "/out/benchmarks/all_verifications_benchmark.json" ]; then
-    print_message "$GREEN" "✅ Proof verification already completed, skipping verification step."
-    print_message "$CYAN" "   Found verification results for all test cases."
-    print_message "$CYAN" "   To re-verify, delete the '/out/benchmarks/all_verifications_benchmark.json' file first."
-    
-    # Display existing benchmark results
-    if [ -f "/out/benchmarks/verifications_summary.md" ]; then
-        print_message "$CYAN" "📊 Displaying existing benchmark results:"
-        cat /out/benchmarks/verifications_summary.md
-    fi
-    exit 0
-fi
-
 # Check if proof files exist
 missing_proofs=()
 for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    if [ ! -f "data/proof_${test_case}.groth16" ]; then
+    if [ ! -f "/out/proof_${test_case}.groth16" ]; then
         missing_proofs+=($test_case)
     fi
 done
@@ -74,9 +60,6 @@ if [ ${#missing_proofs[@]} -gt 0 ]; then
     exit 1
 fi
 
-# Create benchmark directories
-mkdir -p /out/benchmarks
-
 # Verify proofs with hyperfine benchmark  
 print_message "$CYAN" "🔄 Verifying proofs..."
 TEST_CASES_LIST=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
@@ -86,7 +69,7 @@ hyperfine --min-runs 1 --max-runs 1 \
     --show-output \
     --export-json /out/benchmarks/all_verifications_benchmark.json \
     --export-markdown /out/benchmarks/verifications_summary.md \
-    'go run main.go circuit.go verify tests/test_case_{test_case}.json'
+    'go run main.go circuit.go verify -d /out tests/test_case_{test_case}.json'
 
 print_message "$GREEN" "✅ All proofs verified successfully!"
 

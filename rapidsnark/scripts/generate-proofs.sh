@@ -3,11 +3,10 @@
 # Exit on error
 set -e
 
-echo "🔐 Generating proofs for all test cases..."
+echo "🔐 [4/5] Generating proofs..."
 
 # Create directories for proofs and benchmark results
 mkdir -p /out/proofs
-mkdir -p /out/benchmarks
 
 # Discover test cases from tests directory
 TEST_CASE_FILES=(./tests/test_case_*.json)
@@ -20,7 +19,6 @@ fi
 # Extract test case numbers and sort them
 TEST_CASE_NUMBERS=()
 for file in "${TEST_CASE_FILES[@]}"; do
-    # Extract number from filename (e.g., test_case_3.json -> 3)
     if [[ $file =~ test_case_([0-9]+)\.json ]]; then
         TEST_CASE_NUMBERS+=(${BASH_REMATCH[1]})
     fi
@@ -34,40 +32,12 @@ NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
 
 echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
 
-# Check if all proof files already exist
-missing_proofs=()
-for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    if [ ! -f "/out/proofs/proof_${test_case}.json" ] || [ ! -f "/out/proofs/public_${test_case}.json" ]; then
-        missing_proofs+=($test_case)
-    fi
-done
-
-if [ ${#missing_proofs[@]} -eq 0 ]; then
-    echo "✅ All proof files already exist, skipping proof generation."
-    echo "   Found all proof files for test cases: ${TEST_CASE_NUMBERS[*]}"
-    echo "   To regenerate proofs, delete the proof files first."
-    
-    # Still check if we have benchmark results
-    if [ -f "/out/benchmarks/all_proofs_benchmark.json" ]; then
-        echo "📊 Displaying existing benchmark results:"
-        if [ -f "/out/benchmarks/proofs_summary.md" ]; then
-            cat /out/benchmarks/proofs_summary.md
-        fi
-    fi
-    exit 0
-fi
-
-echo "📝 Found ${#missing_proofs[@]} missing proof files out of $NUM_TEST_CASES total."
-echo "💡 Missing proofs: ${missing_proofs[*]}"
-
-# Generate missing proofs with benchmark
-echo "🔄 Generating missing proofs..."
-# Create comma-separated list of missing test cases for hyperfine
-MISSING_TEST_CASES=$(printf "%s," "${missing_proofs[@]}" | sed 's/,$//')
-echo "🔄 Running benchmark for missing test cases: $MISSING_TEST_CASES"
+# Generate proofs with benchmark
+echo "🔄 Generating proofs..."
+TEST_CASES_LIST=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
 
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case $MISSING_TEST_CASES \
+    -L test_case $TEST_CASES_LIST \
     --show-output \
     --export-json /out/benchmarks/all_proofs_benchmark.json \
     --export-markdown /out/benchmarks/proofs_summary.md \
