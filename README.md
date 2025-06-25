@@ -99,7 +99,6 @@ docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
 
 ### Noir Benchmarks
 
-
 ```bash
 cd noir
 mkdir -p data
@@ -177,9 +176,9 @@ gnark uses native big integer handling, so test cases use hex strings:
 
 After running the benchmarks, you'll find the results in:
 
-- `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs (resumable execution)
-- `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
-- `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir (resumable execution)
+- `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs
+- `rapidsnark/data/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
+- `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir
 - `gnark/data/`: Contains circuit files, proofs, and benchmark timing reports for gnark
 
 ### Circuit Compatibility
