@@ -3,10 +3,8 @@
 # Exit on error
 set -e
 
-echo "🔍 Verifying proofs for all test cases..."
+echo "🔍 [5/5] Verifying proofs..."
 
-# Create a directory for benchmark results
-mkdir -p /out/benchmarks
 
 # Discover test cases from tests directory
 TEST_CASE_FILES=(./tests/test_case_*.json)

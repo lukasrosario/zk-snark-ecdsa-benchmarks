@@ -14,7 +14,7 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) runtime for test case generation
+- [Rust & Cargo](https://doc.rust-lang.org/cargo/) for test case generation
 - [Docker](https://www.docker.com/) for running the benchmarks in isolated environments (with 16GB memory allocated)
 - Download powers of tau
 ```bash
@@ -39,17 +39,12 @@ zk-SNARKs enable proving knowledge of an ECDSA signature without revealing the s
    cd zk-snark-ecdsa-benchmarks
    ```
 
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-
 ## Generating Test Cases
 
 The first step is to generate ECDSA signature test cases. This creates valid signature/public key pairs with the same message hash for testing all implementations:
 
 ```bash
-bun run tests:generate --num-test-cases=10
+cargo run --bin generate_test_cases -- --num-test-cases=10
 ```
 
 This command:
@@ -103,7 +98,6 @@ docker run -v $(pwd)/pot22_final.ptau:/app/pot22_final.ptau \
 ```
 
 ### Noir Benchmarks
-
 
 ```bash
 cd noir
@@ -182,9 +176,9 @@ gnark uses native big integer handling, so test cases use hex strings:
 
 After running the benchmarks, you'll find the results in:
 
-- `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs (resumable execution)
-- `rapidsnark/benchmarks/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
-- `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir (resumable execution)
+- `snarkjs/data/`: Contains proving time, verification time, and gas cost reports for snarkjs
+- `rapidsnark/data/`: Contains proving time, verification time, and gas cost reports for rapidsnark  
+- `noir/data/`: Contains compilation, witness, proof, verification, and gas usage artifacts for Noir
 - `gnark/data/`: Contains circuit files, proofs, and benchmark timing reports for gnark
 
 ### Circuit Compatibility

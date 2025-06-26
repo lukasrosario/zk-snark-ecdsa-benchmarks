@@ -59,3 +59,9 @@ rapidsnark/rapidsnark
 
 pot22_final.ptau
 */data/*
+# Ignore local build artifacts
+*.r1cs
+*.key
+*.sol
+*.json
+*.txt 

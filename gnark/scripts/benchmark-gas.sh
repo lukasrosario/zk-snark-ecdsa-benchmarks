@@ -15,19 +15,15 @@ print_message() {
 
 print_message "$CYAN" "⛽ Benchmarking gas usage for all test cases..."
 
-# Ensure we're in the correct directory
-cd /app
+# Create the main gas benchmarking directory and cd into it
+mkdir -p /out/gas-reports/foundry
+cd /out/gas-reports/foundry
 
-# Check if verifying key exists
-if [ ! -f "data/verifying.key" ]; then
-    print_message "$RED" "Verifying key not found. Please run compile-circuit.sh first."
-    exit 1
-fi
-
-# Discover test cases
-TEST_CASE_FILES=(tests/test_case_*.json)
+# Discover test cases from tests directory
+TEST_CASE_FILES=(/app/tests/test_case_*.json)
 if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
-    print_message "$RED" "No test case files found in tests directory!"
+    echo "❌ No test case files found in /app/tests directory!"
+    echo "   Expected files like: test_case_1.json, test_case_2.json, etc."
     exit 1
 fi
 
@@ -44,239 +40,177 @@ IFS=$'\n' TEST_CASE_NUMBERS=($(sort -n <<<"${TEST_CASE_NUMBERS[*]}"))
 unset IFS
 
 NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
-print_message "$CYAN" "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
+echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
 
-# Check if gas benchmarking already completed
-if [ -d "/out/gas-reports" ] && [ -f "/out/gas-reports/gas_benchmark_summary.json" ]; then
-    COMPLETED_BENCHMARKS=$(jq -r '.results | length' "/out/gas-reports/gas_benchmark_summary.json" 2>/dev/null || echo "0")
-    if [ "$COMPLETED_BENCHMARKS" -eq "$NUM_TEST_CASES" ]; then
-        print_message "$GREEN" "✅ Gas benchmarking already completed, skipping gas benchmark step."
-        print_message "$CYAN" "   Found gas reports for all test cases."
-        print_message "$CYAN" "   To re-run gas benchmarks, delete the '/out/gas-reports' directory first."
-        
-        # Display existing gas benchmark results
-        print_message "$CYAN" "📊 Displaying existing gas benchmark results:"
-        echo ""
-        echo "Gas Usage Summary"
-        echo "================="
-        echo ""
-        
-        for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-            if [ -f "/out/gas-reports/gas_report_${test_case}.txt" ]; then
-                echo "Test Case ${test_case}:"
-                cat "/out/gas-reports/gas_report_${test_case}.txt"
-                echo ""
-            fi
-        done
-        exit 0
-    fi
-fi
+echo "🔧 Setting up Foundry..."
+forge init --no-git
 
-# Check if proof files exist
-missing_proofs=()
-for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    if [ ! -f "data/proof_${test_case}.groth16" ]; then
-        missing_proofs+=($test_case)
-    fi
-done
+echo "🔨 Generating Solidity verifier..."
+# Run the Go command from the /app directory where go.mod is located
+# The generate_verifier command creates the file directly, so no redirection needed
+(cd /app && go run cmd/generate_verifier/main.go > /dev/null 2>&1)
 
-if [ ${#missing_proofs[@]} -gt 0 ]; then
-    print_message "$RED" "Missing proof files for test cases: ${missing_proofs[*]}"
-    print_message "$RED" "Please run generate-proofs.sh first."
-    exit 1
-fi
+# Copy the generated verifier to the Foundry src directory
+cp /app/src/Groth16Verifier.sol src/
 
-# Create gas benchmarking directories
-mkdir -p /out/gas-reports
-mkdir -p gas-bench
-
-# Create Foundry project structure
-cd gas-bench
-if [ ! -f "foundry.toml" ]; then
-    print_message "$CYAN" "🔨 Setting up Foundry project..."
-    
-    # Create basic directory structure
-    mkdir -p src test lib out
-    
-    # Create foundry.toml
-    cat > foundry.toml << 'FOUNDRY_EOF'
+# Create foundry.toml to specify solc version
+echo "📝 Creating foundry.toml to use solc 0.8.20..."
+cat > foundry.toml << EOF
 [profile.default]
-src = "src"
-out = "out" 
-libs = ["lib"]
 solc = "0.8.20"
-remappings = ["forge-std/=lib/forge-std/src/"]
-FOUNDRY_EOF
+EOF
 
-    # Install forge-std
-    print_message "$CYAN" "📦 Setting up forge-std dependencies..."
-    if command -v git &> /dev/null; then
-        git init . 2>/dev/null || true
-        forge install foundry-rs/forge-std --no-commit 2>/dev/null || {
-            print_message "$CYAN" "📦 Manual forge-std setup..."
-            mkdir -p lib/forge-std/src
-            cat > lib/forge-std/src/Test.sol << 'TEST_EOF'
+# Get the number of public inputs from verification_key.json
+PUBLIC_INPUTS_COUNT=12 # Corresponds to R, S, MsgHash (4 limbs each)
+
+echo "📝 Creating test contract..."
+cat > src/GasTest.sol << EOF
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract Test {
-    function assertTrue(bool condition, string memory message) public pure {
-        require(condition, message);
+import "./Groth16Verifier.sol";
+
+contract GasTest {
+    Verifier verifier;
+
+    constructor() {
+        verifier = new Verifier();
     }
-    
-    function assertTrue(bool condition) public pure {
-        require(condition, "Assertion failed");
-    }
-}
-TEST_EOF
-        }
-    else
-        mkdir -p lib/forge-std/src
-        cat > lib/forge-std/src/Test.sol << 'TEST_EOF'
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
 
-contract Test {
-    function assertTrue(bool condition, string memory message) public pure {
-        require(condition, message);
-    }
-    
-    function assertTrue(bool condition) public pure {
-        require(condition, "Assertion failed");
-    }
-}
-TEST_EOF
-    fi
-fi
-
-# Ensure test directory exists
-mkdir -p test
-
-# Generate Solidity verifier from gnark verification key
-print_message "$CYAN" "🔧 Generating Solidity verifier..."
-go run ../cmd/generate_verifier/main.go
-
-print_message "$CYAN" "🧪 Running gas benchmarks for $NUM_TEST_CASES test cases..."
-
-# Initialize results array
-GAS_RESULTS=()
-
-# Create gas test contract for each test case
-for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    print_message "$CYAN" "⛽ Benchmarking gas usage for test case $test_case..."
-    
-    # Generate test contract (simplified without forge-std dependency)
-    cat > "test/GasTest${test_case}.t.sol" <<EOF
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import {Test} from "forge-std/Test.sol";
-import "../src/Groth16Verifier.sol";
-
-contract GasTest${test_case} is Test {
-    Verifier verifier = new Verifier();
-
-    function testVerifyProof${test_case}() public view {
-        // >>> Go will paste fully-expanded proof, commitments, commitmentPok, input here
-        PROOF_DATA_PLACEHOLDER_${test_case}
-
+    function verifyProof(
+        uint256[8] calldata proof,
+        uint256[2] calldata commitments,
+        uint256[2] calldata commitmentPok,
+        uint256[12] calldata input
+    ) public view {
         verifier.verifyProof(proof, commitments, commitmentPok, input);
-        assertTrue(true);
     }
 }
 EOF
 
-    # Generate proof data and insert into contract
-    print_message "$CYAN" "🔄 Generating test data for test case $test_case..."
-    go run ../cmd/generate_test_data/main.go "$test_case" "../tests/test_case_${test_case}.json" "../data/proof_${test_case}.groth16"
+forge build
+
+echo "🧪 Running gas benchmarks for $NUM_TEST_CASES test cases..."
+
+# Create a directory for gas reports
+mkdir -p ../reports
+
+# Create a summary file for all gas reports
+echo "Gas Usage Summary" > ../reports/summary.txt
+echo "=================" >> ../reports/summary.txt
+echo "" >> ../reports/summary.txt
+
+# Create a JSON file to store all gas data for statistics
+echo "{" > ../reports/all_gas_data.json
+echo "  \"results\": [" >> ../reports/all_gas_data.json
+
+# Run gas report for each test case
+for idx in "${!TEST_CASE_NUMBERS[@]}"; do
+    test_case=${TEST_CASE_NUMBERS[$idx]}
+    print_message "$CYAN" "⛽ Benchmarking gas usage for test case $test_case..."
+    
+    # Generate proof data and insert into a temporary test file
+    (cd /app && go run cmd/generate_test_data/main.go "$test_case" "/app/tests/test_case_${test_case}.json" "/out/proof_${test_case}.groth16" > /tmp/test_data_${test_case}.sol)
+    
+    # Copy the generated test file to the test directory
+    cp /tmp/test_data_${test_case}.sol test/GasTest.t.sol
     
     # Run gas benchmark for this test case
     print_message "$CYAN" "🧪 Running gas benchmark for test case $test_case..."
     
-    print_message "$CYAN" "🔍 Building contracts..."
-    if ! forge build 2>&1; then
-        print_message "$RED" "Error: Failed to build contracts for test case $test_case"
-        continue
-    fi
+    # Run the test and capture gas usage
+    GAS_REPORT_FILE="../reports/gas_report_${test_case}.txt"
+    forge test --match-test "testVerifyProof${test_case}" --gas-report > "$GAS_REPORT_FILE"
     
-    print_message "$CYAN" "🚀 Running forge test for test case $test_case..."
-    # Run the test and capture gas usage with timeout
-    if timeout 60 forge test --match-test "testVerifyProof${test_case}" --gas-report > "/out/gas-reports/gas_report_${test_case}.txt" 2>&1; then
-        print_message "$GREEN" "✅ Test completed for test case $test_case"
-    else
-        print_message "$RED" "❌ Test failed or timed out for test case $test_case"
-    fi
+    # Extract the gas usage from the report
+    GAS_USAGE=$(grep -o "testVerifyProof${test_case}() (gas: [0-9]*)" "$GAS_REPORT_FILE" | sed -E 's/.*\(gas: ([0-9]*)\)/\1/')
     
-    GAS_USAGE=$(grep -o "testVerifyProof${test_case}() (gas: [0-9]*)" "/out/gas-reports/gas_report_${test_case}.txt" | sed -E 's/.*\(gas: ([0-9]*)\)/\1/' | head -1 || echo "")
-
     if [ -z "$GAS_USAGE" ]; then
-        print_message "$RED" "❌ Could not extract gas usage from test result for $BASENAME"
+        echo "Error: Could not extract gas usage from test result for test case $test_case"
         exit 1
     fi
     
-    print_message "$GREEN" "✅ Gas usage for test case $test_case: $GAS_USAGE"
-    echo "$GAS_USAGE gas"
+    print_message "$GREEN" "✅ Gas usage for test case $test_case: $GAS_USAGE gas"
     
-    # Store result for summary
-    GAS_RESULTS+=("{\"test_case\":\"test_case_$test_case\",\"gas_used\":$GAS_USAGE}")
+    # Add to summary
+    echo "Test Case $test_case:" >> ../reports/summary.txt
+    cat "$GAS_REPORT_FILE" >> ../reports/summary.txt
+    echo "" >> ../reports/summary.txt
     
-    echo "Test Case ${test_case} gas benchmark completed."
+    # Add to JSON file
+    if [ "$test_case" = "${TEST_CASE_NUMBERS[0]}" ]; then
+        echo "    {" >> ../reports/all_gas_data.json
+    else
+        echo "    ,{" >> ../reports/all_gas_data.json
+    fi
+    echo "      \"test_case\": $test_case," >> ../reports/all_gas_data.json
+    echo "      \"mean\": $GAS_USAGE," >> ../reports/all_gas_data.json
+    echo "      \"min\": $GAS_USAGE," >> ../reports/all_gas_data.json
+    echo "      \"max\": $GAS_USAGE" >> ../reports/all_gas_data.json
+    echo "    }" >> ../reports/all_gas_data.json
+    
+    # Display a concise gas report for this test case
+    echo "Gas Report for Test Case $test_case:"
+    echo "  Test Gas Usage: $GAS_USAGE gas"
+    echo "----------------------------------------"
 done
 
-cd ..
+# Close the JSON file
+echo "  ]" >> ../reports/all_gas_data.json
+echo "}" >> ../reports/all_gas_data.json
 
-print_message "$GREEN" "✅ All gas benchmarks completed!"
+echo "✅ Gas benchmarking complete! Check the /out/gas-reports directory for results."
+echo "📊 Summary of gas usage:"
+cat /out/gas-reports/reports/summary.txt
 
-# Generate comprehensive gas usage summary
-print_message "$CYAN" "📊 Generating gas usage summary..."
+# Calculate and display aggregate statistics
+echo ""
+echo "📈 Aggregate Statistics:"
+echo "----------------------------------------"
 
-# Create JSON summary
-cat > "/out/gas-reports/gas_benchmark_summary.json" << EOF
-{
-  "total_test_cases": $NUM_TEST_CASES,
-  "timestamp": "$(date -u --iso-8601=seconds)",
-  "results": [
-    $(IFS=','; echo "${GAS_RESULTS[*]}")
-  ]
-}
-EOF
-
-# Calculate statistics
-if [ ${#GAS_RESULTS[@]} -gt 0 ]; then
-    avg_gas=$(jq -r '[.results[].gas_used] | add / length' "/out/gas-reports/gas_benchmark_summary.json")
-    min_gas=$(jq -r '[.results[].gas_used] | min' "/out/gas-reports/gas_benchmark_summary.json")
-    max_gas=$(jq -r '[.results[].gas_used] | max' "/out/gas-reports/gas_benchmark_summary.json")
-    std_dev=$(jq -r '
-        .results | 
-        map(.gas_used) | 
-        (add / length) as $mean |
-        map(($mean - .) * ($mean - .)) |
-        (add / length) | 
-        sqrt
-    ' "/out/gas-reports/gas_benchmark_summary.json")
-    
-    # Update summary with statistics
-    jq ". + {\"average_gas_used\": $avg_gas, \"min_gas_used\": $min_gas, \"max_gas_used\": $max_gas, \"std_dev_gas_used\": $std_dev}" "/out/gas-reports/gas_benchmark_summary.json" > "/out/gas-reports/gas_benchmark_summary.json.tmp" && mv "/out/gas-reports/gas_benchmark_summary.json.tmp" "/out/gas-reports/gas_benchmark_summary.json"
+# Check if the JSON file exists and is valid
+if [ ! -f "/out/gas-reports/reports/all_gas_data.json" ]; then
+    echo "Error: Gas data file not found"
+    exit 1
 fi
 
-# Display summary
-print_message "$CYAN" "📊 Displaying gas benchmark results:"
-echo ""
-echo "Gas Usage Summary"
-echo "================="
-echo ""
+# Calculate statistics with error handling
+if ! avg_gas=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' /out/gas-reports/reports/all_gas_data.json 2>/dev/null); then
+    echo "Error: Could not calculate average gas usage"
+    exit 1
+fi
 
-for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    echo "Test Case ${test_case}:"
-    cat "/out/gas-reports/gas_report_${test_case}.txt"
-    echo ""
-done
+if ! min_gas=$(jq -r '[.results[].min | select(. != null)] | min' /out/gas-reports/reports/all_gas_data.json 2>/dev/null); then
+    echo "Error: Could not calculate minimum gas usage"
+    exit 1
+fi
 
-if [ ${#GAS_RESULTS[@]} -gt 0 ]; then
-    print_message "$CYAN" "📈 Gas Usage Statistics:"
-    echo "========================================"
-    printf "Average Gas: %.0f ± %.0f gas\n" $avg_gas $std_dev
-    printf "Min Gas: %.0f gas\n" $min_gas
-    printf "Max Gas: %.0f gas\n" $max_gas
-    echo "========================================"
-fi 
+if ! max_gas=$(jq -r '[.results[].max | select(. != null)] | max' /out/gas-reports/reports/all_gas_data.json 2>/dev/null); then
+    echo "Error: Could not calculate maximum gas usage"
+    exit 1
+fi
+
+# Calculate standard deviation
+if ! std_dev=$(jq -r '
+    .results | 
+    map(.mean) | 
+    (add / length) as $mean |
+    map(($mean - .) * ($mean - .)) |
+    (add / length) | 
+    sqrt
+' /out/gas-reports/reports/all_gas_data.json 2>/dev/null); then
+    echo "Error: Could not calculate standard deviation"
+    exit 1
+fi
+
+# Only print if we have valid numbers
+if [[ "$avg_gas" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$min_gas" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$max_gas" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$std_dev" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+    printf "Average Gas: %.0f ± %.0f\n" $avg_gas $std_dev
+    printf "Min Gas: %.0f\n" $min_gas
+    printf "Max Gas: %.0f\n" $max_gas
+else
+    echo "Error: Invalid numerical values in gas data"
+    exit 1
+fi
+
+echo "----------------------------------------" 

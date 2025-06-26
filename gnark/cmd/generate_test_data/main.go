@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"text/template"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
@@ -118,10 +120,108 @@ func main() {
 		log.Fatal("Failed to extract proof components:", err)
 	}
 
-	// Extract commitment (first commitment point) and commitmentPok
+	// Extract commitment and commitmentPok values.
+	commitments, commitmentPokVals, err := extractCommitmentData(proof)
+	if err != nil {
+		log.Fatal("Failed to extract commitment data:", err)
+	}
+
+	// Prepare data for the template
+	templateData := struct {
+		TestCaseNum   string
+		Proof         [8]string
+		Commitments   [2]string
+		CommitmentPok [2]string
+		PublicInputs  []string
+	}{
+		TestCaseNum:   testCaseNum,
+		Commitments:   commitments,
+		CommitmentPok: commitmentPokVals,
+	}
+
+	// The order for B G2 point is [X.A1, X.A0, Y.A1, Y.A0] for Solidity
+	templateData.Proof = [8]string{
+		components[0], // A.X
+		components[1], // A.Y
+		components[3], // B.X.A1 (imaginary)
+		components[2], // B.X.A0 (real)
+		components[5], // B.Y.A1 (imaginary)
+		components[4], // B.Y.A0 (real)
+		components[6], // C.X
+		components[7], // C.Y
+	}
+
+	for i := 0; i < 12; i++ {
+		hexVal := "0"
+		if i < len(publicValues) {
+			hexVal = formatFieldElement(publicValues[i].String())
+		}
+		templateData.PublicInputs = append(templateData.PublicInputs, hexVal)
+	}
+
+	// Define the Go template for the Solidity test file
+	const solTemplate = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Test.sol";
+import "../src/GasTest.sol";
+
+contract GasTestTest is Test {
+    GasTest gasTest;
+    
+    function setUp() public {
+        gasTest = new GasTest();
+    }
+    
+    function testVerifyProof{{.TestCaseNum}}() public {
+        uint256[8] memory proofArr;
+        proofArr[0] = 0x{{index .Proof 0}}; // A.X
+        proofArr[1] = 0x{{index .Proof 1}}; // A.Y
+        proofArr[2] = 0x{{index .Proof 2}}; // B.X.A1
+        proofArr[3] = 0x{{index .Proof 3}}; // B.X.A0
+        proofArr[4] = 0x{{index .Proof 4}}; // B.Y.A1
+        proofArr[5] = 0x{{index .Proof 5}}; // B.Y.A0
+        proofArr[6] = 0x{{index .Proof 6}}; // C.X
+        proofArr[7] = 0x{{index .Proof 7}}; // C.Y
+
+        uint256[2] memory commitmentsArr;
+        commitmentsArr[0] = 0x{{index .Commitments 0}};
+        commitmentsArr[1] = 0x{{index .Commitments 1}};
+
+        uint256[2] memory commitmentPokArr;
+        commitmentPokArr[0] = 0x{{index .CommitmentPok 0}};
+        commitmentPokArr[1] = 0x{{index .CommitmentPok 1}};
+
+        uint256[12] memory inputArr;
+{{range $i, $val := .PublicInputs}}
+        inputArr[{{$i}}] = 0x{{$val}};
+{{end}}
+        
+        gasTest.verifyProof(proofArr, commitmentsArr, commitmentPokArr, inputArr);
+    }
+}
+`
+
+	// Parse and execute the template
+	tmpl, err := template.New("solidityTest").Parse(solTemplate)
+	if err != nil {
+		log.Fatalf("failed to parse template: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, templateData)
+	if err != nil {
+		log.Fatalf("failed to execute template: %v", err)
+	}
+
+	// Print the result to stdout so it can be redirected by the shell script
+	fmt.Println(buf.String())
+}
+
+func extractCommitmentData(proof groth16.Proof) (commitments [2]string, commitmentPokVals [2]string, err error) {
 	// Initialize with zero so that fallback is still valid if missing
-	commitments := [2]string{"0", "0"}
-	commitmentPokVals := [2]string{"0", "0"}
+	commitments = [2]string{"0", "0"}
+	commitmentPokVals = [2]string{"0", "0"}
 
 	proofVal := reflect.ValueOf(proof)
 	if proofVal.Kind() == reflect.Ptr {
@@ -140,72 +240,18 @@ func main() {
 		}
 	}
 
-	// CommitmentPok field (array or struct of fr.Element)
+	// CommitmentPok field is a G1Affine point
 	pokField := proofVal.FieldByName("CommitmentPok")
 	if pokField.IsValid() {
-		switch pokField.Kind() {
-		case reflect.Array, reflect.Slice:
-			for i := 0; i < pokField.Len() && i < 2; i++ {
-				commitmentPokVals[i] = elementToHex(pokField.Index(i))
-			}
-		case reflect.Struct:
-			for i := 0; i < pokField.NumField() && i < 2; i++ {
-				commitmentPokVals[i] = elementToHex(pokField.Field(i))
-			}
+		if pokField.Kind() == reflect.Struct && pokField.NumField() >= 2 {
+			xField := pokField.Field(0)
+			commitmentPokVals[0] = elementToHex(xField)
+			yField := pokField.Field(1)
+			commitmentPokVals[1] = elementToHex(yField)
 		}
 	}
 
-	// Format the Solidity test data
-	solidityData := fmt.Sprintf(`        // Groth16 proof arrays for test case %s
-        uint256[8] memory proof;
-        proof[0] = 0x%s; // A.X
-        proof[1] = 0x%s; // A.Y
-        proof[2] = 0x%s; // B.X.A1 (imaginary)
-        proof[3] = 0x%s; // B.X.A0 (real)
-        proof[4] = 0x%s; // B.Y.A1 (imaginary)
-        proof[5] = 0x%s; // B.Y.A0 (real)
-        proof[6] = 0x%s; // C.X
-        proof[7] = 0x%s; // C.Y
-
-        uint256[2] memory commitments;
-        commitments[0] = 0x%s; // Commitment X
-        commitments[1] = 0x%s; // Commitment Y
-
-        uint256[2] memory commitmentPok;
-        commitmentPok[0] = 0x%s;
-        commitmentPok[1] = 0x%s;
-
-        uint256[12] memory input;`,
-		testCaseNum,
-		components[0], components[1], components[3], components[2], components[5], components[4], components[6], components[7],
-		commitments[0], commitments[1], commitmentPokVals[0], commitmentPokVals[1])
-
-	// Add the real public inputs
-	for i := 0; i < 12; i++ {
-		hexVal := "0"
-		if i < len(publicValues) {
-			hexVal = formatFieldElement(publicValues[i].String())
-		}
-		solidityData += fmt.Sprintf(`
-        input[%d] = 0x%s;`, i, hexVal)
-	}
-
-	// Read the test file template
-	testFilePath := fmt.Sprintf("test/GasTest%s.t.sol", testCaseNum)
-	content, err := os.ReadFile(testFilePath)
-	if err != nil {
-		log.Fatal("Failed to read test file:", err)
-	}
-
-	// Replace placeholder with actual data
-	placeholder := fmt.Sprintf("PROOF_DATA_PLACEHOLDER_%s", testCaseNum)
-	updatedContent := strings.Replace(string(content), placeholder, solidityData, 1)
-
-	// Write back the updated content
-	err = os.WriteFile(testFilePath, []byte(updatedContent), 0644)
-	if err != nil {
-		log.Fatal("Failed to write updated test file:", err)
-	}
+	return
 }
 
 func extractProofComponents(proof groth16.Proof) ([8]string, error) {

@@ -3,13 +3,19 @@
 # Exit on error
 set -e
 
-echo "🧮 Computing witnesses for all test cases..."
+echo "🧮 [3/5] Computing witnesses..."
 
-# Create directories for witnesses and benchmark results
+# Create directory for witnesses
 mkdir -p /out/witnesses
-mkdir -p /out/benchmarks
 
-# Discover test cases from tests directory
+# Check if circuit was compiled
+if [ ! -f "/out/setup/circuit_js/circuit.wasm" ]; then
+    echo "❌ Circuit not compiled!"
+    echo "   Please run compile-circuit.sh first."
+    exit 1
+fi
+
+# Discover test cases
 TEST_CASE_FILES=(./tests/test_case_*.json)
 if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
     echo "❌ No test case files found in tests directory!"
@@ -31,47 +37,18 @@ IFS=$'\n' TEST_CASE_NUMBERS=($(sort -n <<<"${TEST_CASE_NUMBERS[*]}"))
 unset IFS
 
 NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
-
 echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
 
-# Check if all witness files already exist
-missing_witnesses=()
-for test_case in "${TEST_CASE_NUMBERS[@]}"; do
-    if [ ! -f "/out/witnesses/witness_${test_case}.wtns" ]; then
-        missing_witnesses+=($test_case)
-    fi
-done
-
-if [ ${#missing_witnesses[@]} -eq 0 ]; then
-    echo "✅ All witness files already exist, skipping witness computation."
-    echo "   Found all witness files for test cases: ${TEST_CASE_NUMBERS[*]}"
-    echo "   To recompute witnesses, delete the witness files first."
-    
-    # Still check if we have benchmark results
-    if [ -f "/out/benchmarks/all_witnesses_benchmark.json" ]; then
-        echo "📊 Displaying existing benchmark results:"
-        if [ -f "/out/benchmarks/witnesses_summary.md" ]; then
-            cat /out/benchmarks/witnesses_summary.md
-        fi
-    fi
-    exit 0
-fi
-
-echo "📝 Found ${#missing_witnesses[@]} missing witness files out of $NUM_TEST_CASES total."
-echo "💡 Missing witnesses: ${missing_witnesses[*]}"
-
-# Compute missing witnesses with benchmark
-echo "🔄 Computing missing witnesses..."
-# Create comma-separated list of missing test cases for hyperfine
-MISSING_TEST_CASES=$(printf "%s," "${missing_witnesses[@]}" | sed 's/,$//')
-echo "🔄 Running benchmark for missing test cases: $MISSING_TEST_CASES"
+# Compute witnesses with benchmark
+echo "🔄 Computing witnesses..."
+TEST_CASES_LIST=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
 
 hyperfine --min-runs 1 --max-runs 1 \
-    -L test_case $MISSING_TEST_CASES \
+    -L test_case $TEST_CASES_LIST \
     --show-output \
     --export-json /out/benchmarks/all_witnesses_benchmark.json \
     --export-markdown /out/benchmarks/witnesses_summary.md \
-    'node /out/compilation/circuit_js/generate_witness.js /out/compilation/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json /out/witnesses/witness_{test_case}.wtns'
+    'node /out/setup/circuit_js/generate_witness.js /out/setup/circuit_js/circuit.wasm ./tests/test_case_{test_case}.json /out/witnesses/witness_{test_case}.wtns'
 echo "✅ All witnesses computed successfully!"
 echo "📈 Aggregate Statistics:"
 echo "----------------------------------------"

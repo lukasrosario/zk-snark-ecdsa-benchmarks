@@ -48,9 +48,6 @@ RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfin
 
 RUN mkdir -p /app
 
-# Download Powers of Tau file
-RUN curl -L "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau" -o /app/pot22_final.ptau
-
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
 RUN /root/.foundry/bin/foundryup -C d484a00089d789a19e2e43e63bbb3f1500eb2cbf

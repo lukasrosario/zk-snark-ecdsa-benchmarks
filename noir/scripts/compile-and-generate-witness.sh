@@ -25,7 +25,7 @@ NOIR_DIR="$(dirname "$0")/.."
 NOIR_DIR="$(cd "$NOIR_DIR" && pwd)"
 TESTS_DIR="$NOIR_DIR/tests"
 
-# Create persistent output directories
+# Create persistent output directories for compilation and witnesses
 mkdir -p /out/compilation
 mkdir -p /out/witnesses
 
@@ -37,26 +37,21 @@ print_message "$CYAN" "Checking for Nargo.toml: $(ls -la Nargo.toml)"
 
 # Step 1: Compile the circuit
 print_message "$CYAN" "📝 Compiling the Noir circuit..."
-
-# Check if circuit is already compiled
-if [ -f "/out/compilation/benchmarking.json" ] && [ -f "target/benchmarking.json" ]; then
-    print_message "$GREEN" "✅ Circuit already compiled, skipping compilation step."
-    print_message "$GREEN" "   Found: /out/compilation/benchmarking.json"
-    print_message "$GREEN" "   To recompile, delete the '/out/compilation' directory first."
-else
-    # Compile the circuit
-    nargo compile || {
-      print_message "$RED" "❌ Failed to compile Noir circuit";
-      exit 1;
-    }
-    
-    # Copy compiled circuit to persistent location
-    cp target/benchmarking.json /out/compilation/
-    print_message "$GREEN" "✅ Circuit compiled and saved to /out/compilation/benchmarking.json"
-fi
+nargo compile
+# Move the compiled circuit to the desired output location
+mv target/benchmarking.json /out/compilation/benchmarking.json
+print_message "$GREEN" "✅ Circuit compiled and saved to /out/compilation/benchmarking.json"
 
 # Step 2: Generate witnesses for all test cases
 print_message "$CYAN" "🧮 Generating witnesses for test cases..."
+
+# Find all test case files in the persistent tests directory
+TEST_CASE_FILES=(/app/tests/test_case_*.toml)
+
+if [ ! -e "${TEST_CASE_FILES[0]}" ]; then
+    print_message "$RED" "❌ No test case files found in /app/tests"
+    exit 1
+fi
 
 # Count total test cases
 TOTAL_TESTS=$(find "$TESTS_DIR" -name "test_case_*.toml" | wc -l)

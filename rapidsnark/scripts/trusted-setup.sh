@@ -24,12 +24,14 @@ if [ ! -f "pot22_final.ptau" ]; then
     exit 1
 fi
 
-# Generate the proving key and zkey
+echo "✅ Powers of tau file found, proceeding with setup."
 echo "📝 Generating proving key and verification key..."
-NODE_OPTIONS=--max_old_space_size=16384 snarkjs groth16 setup /out/compilation/circuit.r1cs pot22_final.ptau /out/setup/circuit.zkey
+NODE_OPTIONS=--max_old_space_size=16384 snarkjs groth16 setup /out/setup/circuit.r1cs pot22_final.ptau /out/setup/circuit.zkey
 
 # Export the verification key
 echo "🔑 Exporting verification key..."
 NODE_OPTIONS=--max_old_space_size=16384 snarkjs zkey export verificationkey /out/setup/circuit.zkey /out/setup/verification_key.json
+
+echo "✅ Proving key and verification key generated successfully!"
 
 echo "✅ Trusted setup completed successfully!"

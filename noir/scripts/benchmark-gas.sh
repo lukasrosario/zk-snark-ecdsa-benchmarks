@@ -71,36 +71,19 @@ fi
 
 print_message "$CYAN" "📊 Found $TOTAL_PROOFS test cases to benchmark"
 
-# Check if gas benchmarking has already been completed
-GAS_SUMMARY="/out/gas/gas_benchmark_summary.json"
-if [ -f "$GAS_SUMMARY" ]; then
-    COMPLETED_BENCHMARKS=$(jq -r '.results | length' "$GAS_SUMMARY" 2>/dev/null || echo "0")
-    if [ "$COMPLETED_BENCHMARKS" -eq "$TOTAL_PROOFS" ]; then
-        print_message "$GREEN" "✅ Gas benchmarking already completed, skipping gas benchmark step."
-        print_message "$GREEN" "   Found: $GAS_SUMMARY with $COMPLETED_BENCHMARKS results"
-        print_message "$GREEN" "   To re-benchmark, delete the '/out/gas' directory first."
-        exit 0
-    fi
-fi
+# Generate Solidity verifier
+print_message "$CYAN" "🔨 Generating Solidity verifier..."
 
-# Generate Solidity verifier (only if not already exists)
-VERIFIER_FILE="/out/contracts/NoirVerifier.sol"
-if [ ! -f "$VERIFIER_FILE" ]; then
-    print_message "$CYAN" "🔨 Generating Solidity verifier..."
-    
-    # Generate the verification key with keccak hash for EVM compatibility
-    bb write_vk -b "$CIRCUIT_FILE" -o "/out/contracts" --oracle_hash keccak
-    
-    # Generate the Solidity verifier from the verification key
-    bb write_solidity_verifier -k "/out/contracts/vk" -o "/out/contracts/Verifier.sol"
-    
-    # Rename for clarity
-    mv "/out/contracts/Verifier.sol" "$VERIFIER_FILE"
-    
-    print_message "$GREEN" "✅ Solidity verifier generated at $VERIFIER_FILE"
-else
-    print_message "$GREEN" "✅ Solidity verifier already exists, skipping generation."
-fi
+# Generate the verification key with keccak hash for EVM compatibility
+bb write_vk -b "$CIRCUIT_FILE" -o "/out/contracts" --oracle_hash keccak
+
+# Generate the Solidity verifier from the verification key
+bb write_solidity_verifier -k "/out/contracts/vk" -o "/out/contracts/Verifier.sol"
+
+# Rename for clarity
+mv "/out/contracts/Verifier.sol" "/out/contracts/NoirVerifier.sol"
+
+print_message "$GREEN" "✅ Solidity verifier generated at /out/contracts/NoirVerifier.sol"
 
 # Set up Foundry project (only if not already exists)
 FOUNDRY_PROJECT="/out/gas/gas-benchmark"
@@ -120,7 +103,7 @@ solc = "0.8.29"
 EOF
 
     # Copy the verifier
-    cp "$VERIFIER_FILE" src/NoirVerifier.sol
+    cp "/out/contracts/NoirVerifier.sol" src/NoirVerifier.sol
     
     print_message "$CYAN" "📝 Creating test contract..."
     cat > src/GasTest.sol << 'EOF'
@@ -257,6 +240,8 @@ done
 
 # Generate gas usage summary
 print_message "$CYAN" "📊 Generating gas usage summary..."
+
+GAS_SUMMARY="/out/gas/gas_benchmark_summary.json"
 
 # Create JSON summary
 cat > "$GAS_SUMMARY" << EOF
