@@ -1,0 +1,4 @@
+aws_region  = "us-east-1"
+key_name    = "your-ec2-key-pair-name"
+subnet_id   = "subnet-xxxxxxxxx"
+vpc_id      = "vpc-xxxxxxxxx" 
