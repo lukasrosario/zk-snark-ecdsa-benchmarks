@@ -49,22 +49,40 @@ cat > "$RESULTS_DIR/system_info.json" << EOF
 }
 EOF
 
-# Docker performance flags based on available resources
-DOCKER_MEMORY_LIMIT="${MEMORY_GB}g"
-if [ "$MEMORY_GB" -lt 4 ]; then
-    DOCKER_MEMORY_LIMIT="3g"  # Leave some for system
-elif [ "$MEMORY_GB" -lt 8 ]; then
-    DOCKER_MEMORY_LIMIT="6g"
-elif [ "$MEMORY_GB" -lt 16 ]; then
+# Coordinated Memory Allocation Strategy:
+# - Docker containers get enough memory to run Node.js processes plus overhead
+# - Node.js heap size is pre-calculated and passed to containers via environment variables
+# - This ensures no memory conflicts and optimal performance
+# Calculate memory allocation strategy based on available resources
+if [ "$MEMORY_GB" -ge 15 ]; then
+    # 16+ GB instances: Node.js gets 12GB, Docker gets 14GB (leaves 2GB for system + container overhead)
+    NODE_MEMORY_MB=12288
     DOCKER_MEMORY_LIMIT="14g"
+elif [ "$MEMORY_GB" -ge 7 ]; then
+    # 8GB instances: Node.js gets 6GB, Docker gets 7GB (leaves 1GB for system + container overhead)
+    NODE_MEMORY_MB=6144
+    DOCKER_MEMORY_LIMIT="7g"
+elif [ "$MEMORY_GB" -ge 4 ]; then
+    # 4GB instances: Node.js gets 3GB, Docker gets 3.5GB (leaves 0.5GB for system + container overhead)
+    NODE_MEMORY_MB=3072
+    DOCKER_MEMORY_LIMIT="3584m"  # 3.5GB in MB
 else
-    DOCKER_MEMORY_LIMIT="30g"  # Max for most benchmarks
+    # Less than 4GB: Node.js gets 2GB, Docker gets 2.5GB
+    NODE_MEMORY_MB=2048
+    DOCKER_MEMORY_LIMIT="2560m"  # 2.5GB in MB
 fi
 
 # Common Docker flags for performance optimization
 DOCKER_FLAGS="--cpus=${CPU_CORES} --memory=${DOCKER_MEMORY_LIMIT} --memory-swap=${DOCKER_MEMORY_LIMIT} --shm-size=1g"
 
+# Calculate memory in MB for passing to containers
+MEMORY_MB=$((MEMORY_GB * 1024))
+
+# Environment variables to pass to containers (including the calculated Node.js memory)
+DOCKER_ENV="-e HOST_MEMORY_MB=$MEMORY_MB -e HOST_MEMORY_GB=$MEMORY_GB -e NODE_MEMORY_MB=$NODE_MEMORY_MB"
+
 log "Using Docker flags: $DOCKER_FLAGS"
+log "Memory allocation: Host=${MEMORY_GB}GB, Docker=${DOCKER_MEMORY_LIMIT}, Node.js=${NODE_MEMORY_MB}MB"
 
 # Function to run a benchmark suite
 run_benchmark() {
@@ -89,14 +107,14 @@ run_benchmark() {
     
     case $suite in
         "snarkjs")
-            docker run $DOCKER_FLAGS \
+            docker run $DOCKER_FLAGS $DOCKER_ENV \
                 -v "$(pwd)/../pot22_final.ptau:/app/pot22_final.ptau:ro" \
                 -v "$suite_results:/out" \
                 --name "zk-ecdsa-$suite-benchmark-$TIMESTAMP" \
                 "zk-ecdsa-$suite"
             ;;
         "rapidsnark")
-            docker run $DOCKER_FLAGS \
+            docker run $DOCKER_FLAGS $DOCKER_ENV \
                 -v "$(pwd)/../pot22_final.ptau:/app/pot22_final.ptau:ro" \
                 -v "$(pwd)/tests:/app/tests:ro" \
                 -v "$suite_results:/out" \
@@ -104,14 +122,14 @@ run_benchmark() {
                 "zk-ecdsa-$suite"
             ;;
         "noir")
-            docker run $DOCKER_FLAGS \
+            docker run $DOCKER_FLAGS $DOCKER_ENV \
                 -v "$(pwd)/tests:/app/tests:ro" \
                 -v "$suite_results:/out" \
                 --name "zk-ecdsa-$suite-benchmark-$TIMESTAMP" \
                 "zk-ecdsa-$suite"
             ;;
         "gnark")
-            docker run $DOCKER_FLAGS \
+            docker run $DOCKER_FLAGS $DOCKER_ENV \
                 -v "$(pwd)/tests:/app/tests:ro" \
                 -v "$suite_results:/out" \
                 --name "zk-ecdsa-$suite-benchmark-$TIMESTAMP" \
