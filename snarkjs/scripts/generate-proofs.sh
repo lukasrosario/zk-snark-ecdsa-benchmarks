@@ -33,6 +33,33 @@ NUM_TEST_CASES=${#TEST_CASE_NUMBERS[@]}
 
 echo "🔍 Discovered $NUM_TEST_CASES test cases: ${TEST_CASE_NUMBERS[*]}"
 
+# Detect available memory and set appropriate Node.js heap size (cross-platform)
+if command -v free >/dev/null 2>&1; then
+    # Linux (EC2 instances)
+    TOTAL_MEM_MB=$(free -m | awk '/^Mem:/ {print $2}')
+elif command -v sysctl >/dev/null 2>&1; then
+    # macOS
+    TOTAL_MEM_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo "8589934592")
+    TOTAL_MEM_MB=$((TOTAL_MEM_BYTES / 1024 / 1024))
+else
+    # Fallback: assume 8GB
+    TOTAL_MEM_MB=8192
+    echo "⚠️  Could not detect memory, assuming 8GB"
+fi
+
+if [ "$TOTAL_MEM_MB" -ge 15000 ]; then
+    # 16+ GB instances: use 12GB for Node.js
+    NODE_MEMORY=12288
+elif [ "$TOTAL_MEM_MB" -ge 7000 ]; then
+    # 8GB instances: use 6GB for Node.js
+    NODE_MEMORY=6144
+else
+    # 4GB instances: use 3GB for Node.js
+    NODE_MEMORY=3072
+fi
+
+echo "📊 Detected ${TOTAL_MEM_MB}MB RAM, allocating ${NODE_MEMORY}MB to Node.js"
+
 # Generate proofs with benchmark
 echo "🔄 Generating proofs..."
 TEST_CASES_LIST=$(printf "%s," "${TEST_CASE_NUMBERS[@]}" | sed 's/,$//')
@@ -42,7 +69,7 @@ hyperfine --min-runs 1 --max-runs 1 \
     --show-output \
     --export-json /out/benchmarks/all_proofs_benchmark.json \
     --export-markdown /out/benchmarks/proofs_summary.md \
-    'NODE_OPTIONS=--max_old_space_size=16384 snarkjs groth16 prove /out/setup/circuit.zkey /out/witnesses/witness_{test_case}.wtns /out/proofs/proof_{test_case}.json /out/proofs/public_{test_case}.json'
+    "NODE_OPTIONS=--max_old_space_size=$NODE_MEMORY snarkjs groth16 prove /out/setup/circuit.zkey /out/witnesses/witness_{test_case}.wtns /out/proofs/proof_{test_case}.json /out/proofs/public_{test_case}.json"
 
 echo "✅ All proofs generated successfully!"
 
