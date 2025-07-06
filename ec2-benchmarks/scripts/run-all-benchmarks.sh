@@ -178,13 +178,59 @@ if [ -d "/sys/devices/system/cpu/cpu0/cpufreq" ]; then
     sudo sh -c 'echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor' 2>/dev/null || warn "Could not set CPU governor"
 fi
 
-# Run all benchmark suites
-benchmark_start=$(date +%s)
+# Define memory requirements for each suite (in MB)
+SNARKJS_MIN_MEMORY=15000
+RAPIDSNARK_MIN_MEMORY=15000
+NOIR_MIN_MEMORY=4000
+GNARK_MIN_MEMORY=4000
 
-run_benchmark "snarkjs" "SnarkJS (JavaScript) ECDSA Benchmarks"
-run_benchmark "rapidsnark" "RapidSnark (C++) ECDSA Benchmarks" 
-run_benchmark "noir" "Noir (Rust) ECDSA Benchmarks"
-run_benchmark "gnark" "Gnark (Go) ECDSA Benchmarks"
+# Convert GB to MB for comparison
+MEMORY_MB=$((MEMORY_GB * 1024))
+
+# Run benchmark suites based on available memory
+benchmark_start=$(date +%s)
+COMPLETED_SUITES=()
+SKIPPED_SUITES=()
+
+# Check and run SnarkJS
+if [ "$MEMORY_MB" -ge "$SNARKJS_MIN_MEMORY" ]; then
+    log "Memory sufficient for SnarkJS (${MEMORY_MB}MB >= ${SNARKJS_MIN_MEMORY}MB)"
+    run_benchmark "snarkjs" "SnarkJS (JavaScript) ECDSA Benchmarks"
+    COMPLETED_SUITES+=("snarkjs")
+else
+    warn "Skipping SnarkJS - insufficient memory (${MEMORY_MB}MB < ${SNARKJS_MIN_MEMORY}MB)"
+    SKIPPED_SUITES+=("snarkjs")
+fi
+
+# Check and run RapidSnark
+if [ "$MEMORY_MB" -ge "$RAPIDSNARK_MIN_MEMORY" ]; then
+    log "Memory sufficient for RapidSnark (${MEMORY_MB}MB >= ${RAPIDSNARK_MIN_MEMORY}MB)"
+    run_benchmark "rapidsnark" "RapidSnark (C++) ECDSA Benchmarks"
+    COMPLETED_SUITES+=("rapidsnark")
+else
+    warn "Skipping RapidSnark - insufficient memory (${MEMORY_MB}MB < ${RAPIDSNARK_MIN_MEMORY}MB)"
+    SKIPPED_SUITES+=("rapidsnark")
+fi
+
+# Check and run Noir
+if [ "$MEMORY_MB" -ge "$NOIR_MIN_MEMORY" ]; then
+    log "Memory sufficient for Noir (${MEMORY_MB}MB >= ${NOIR_MIN_MEMORY}MB)"
+    run_benchmark "noir" "Noir (Rust) ECDSA Benchmarks"
+    COMPLETED_SUITES+=("noir")
+else
+    warn "Skipping Noir - insufficient memory (${MEMORY_MB}MB < ${NOIR_MIN_MEMORY}MB)"
+    SKIPPED_SUITES+=("noir")
+fi
+
+# Check and run Gnark
+if [ "$MEMORY_MB" -ge "$GNARK_MIN_MEMORY" ]; then
+    log "Memory sufficient for Gnark (${MEMORY_MB}MB >= ${GNARK_MIN_MEMORY}MB)"
+    run_benchmark "gnark" "Gnark (Go) ECDSA Benchmarks"
+    COMPLETED_SUITES+=("gnark")
+else
+    warn "Skipping Gnark - insufficient memory (${MEMORY_MB}MB < ${GNARK_MIN_MEMORY}MB)"
+    SKIPPED_SUITES+=("gnark")
+fi
 
 benchmark_end=$(date +%s)
 total_duration=$((benchmark_end - benchmark_start))
@@ -195,23 +241,33 @@ cat > "$RESULTS_DIR/summary.json" << EOF
   "instance_type": "$INSTANCE_TYPE",
   "cpu_cores": $CPU_CORES,
   "memory_gb": $MEMORY_GB,
+  "memory_mb": $MEMORY_MB,
   "total_duration_seconds": $total_duration,
   "docker_memory_limit": "$DOCKER_MEMORY_LIMIT",
   "started_at": "$(date -d @$benchmark_start -u +%Y-%m-%dT%H:%M:%SZ)",
   "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "suites_completed": ["snarkjs", "rapidsnark", "noir", "gnark"]
+  "suites_completed": [$(printf '"%s",' "${COMPLETED_SUITES[@]}" | sed 's/,$//')]$([ ${#COMPLETED_SUITES[@]} -eq 0 ] && echo ''),
+  "suites_skipped": [$(printf '"%s",' "${SKIPPED_SUITES[@]}" | sed 's/,$//')]$([ ${#SKIPPED_SUITES[@]} -eq 0 ] && echo ''),
+  "memory_requirements": {
+    "snarkjs_min_mb": $SNARKJS_MIN_MEMORY,
+    "rapidsnark_min_mb": $RAPIDSNARK_MIN_MEMORY,
+    "noir_min_mb": $NOIR_MIN_MEMORY,
+    "gnark_min_mb": $GNARK_MIN_MEMORY
+  }
 }
 EOF
 
-log "=== All benchmarks completed in ${total_duration}s ==="
+log "=== Benchmark execution completed in ${total_duration}s ==="
+log "Completed suites: ${COMPLETED_SUITES[*]}"
+log "Skipped suites: ${SKIPPED_SUITES[*]}"
 log "Results saved to: $RESULTS_DIR"
 log "Summary available at: $RESULTS_DIR/summary.json"
 
 # Display disk usage
 du -sh "$RESULTS_DIR"
 
-# Create a quick comparison if all suites completed
-if [ -d "$RESULTS_DIR/snarkjs" ] && [ -d "$RESULTS_DIR/rapidsnark" ] && [ -d "$RESULTS_DIR/noir" ] && [ -d "$RESULTS_DIR/gnark" ]; then
+# Create a performance comparison for completed suites
+if [ ${#COMPLETED_SUITES[@]} -gt 0 ]; then
     log "Generating performance comparison..."
     
     cat > "$RESULTS_DIR/performance_comparison.md" << EOF
@@ -219,19 +275,37 @@ if [ -d "$RESULTS_DIR/snarkjs" ] && [ -d "$RESULTS_DIR/rapidsnark" ] && [ -d "$R
 
 **Instance Type:** $INSTANCE_TYPE  
 **CPU Cores:** $CPU_CORES  
-**Memory:** ${MEMORY_GB}GB  
+**Memory:** ${MEMORY_GB}GB (${MEMORY_MB}MB)  
 **Date:** $(date)
 
 ## Execution Times
 
 EOF
     
-    for suite in snarkjs rapidsnark noir gnark; do
+    for suite in "${COMPLETED_SUITES[@]}"; do
         if [ -f "$RESULTS_DIR/$suite/benchmark_info.json" ]; then
             duration=$(jq -r '.duration_seconds' "$RESULTS_DIR/$suite/benchmark_info.json")
             echo "- **$suite**: ${duration}s" >> "$RESULTS_DIR/performance_comparison.md"
         fi
     done
+    
+    if [ ${#SKIPPED_SUITES[@]} -gt 0 ]; then
+        cat >> "$RESULTS_DIR/performance_comparison.md" << EOF
+
+## Skipped Suites
+
+The following suites were skipped due to insufficient memory:
+
+EOF
+        for suite in "${SKIPPED_SUITES[@]}"; do
+            case $suite in
+                "snarkjs") echo "- **$suite**: Requires ${SNARKJS_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "rapidsnark") echo "- **$suite**: Requires ${RAPIDSNARK_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "noir") echo "- **$suite**: Requires ${NOIR_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "gnark") echo "- **$suite**: Requires ${GNARK_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
+            esac
+        done
+    fi
     
     cat >> "$RESULTS_DIR/performance_comparison.md" << EOF
 
@@ -240,10 +314,12 @@ EOF
 All detailed results, proofs, and artifacts are stored in:
 \`$RESULTS_DIR\`
 
-Each suite has its own subdirectory with complete benchmark outputs.
+Each completed suite has its own subdirectory with complete benchmark outputs.
 EOF
 
     log "Performance comparison saved to: $RESULTS_DIR/performance_comparison.md"
+else
+    warn "No suites completed successfully - no performance comparison generated"
 fi
 
 log "Benchmark suite execution completed successfully!" 
