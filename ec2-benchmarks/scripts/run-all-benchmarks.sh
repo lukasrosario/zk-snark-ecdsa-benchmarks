@@ -154,10 +154,12 @@ run_benchmark() {
 }
 EOF
     
-    # Clean up container
+    # Clean up container and image to free disk space
     docker rm "zk-ecdsa-$suite-benchmark-$TIMESTAMP" 2>/dev/null || true
+    docker rmi "zk-ecdsa-$suite" 2>/dev/null || true
     
     log "$description completed in ${duration}s"
+    log "Cleaned up Docker container and image for $suite"
     cd ..
 }
 
@@ -181,8 +183,8 @@ fi
 # Define memory requirements for each suite (in MB)
 SNARKJS_MIN_MEMORY=15000
 RAPIDSNARK_MIN_MEMORY=15000
-NOIR_MIN_MEMORY=4000
-GNARK_MIN_MEMORY=4000
+NOIR_MIN_MEMORY=2000
+GNARK_MIN_MEMORY=2000
 
 # Convert GB to MB for comparison
 MEMORY_MB=$((MEMORY_GB * 1024))
@@ -299,10 +301,10 @@ The following suites were skipped due to insufficient memory:
 EOF
         for suite in "${SKIPPED_SUITES[@]}"; do
             case $suite in
-                "snarkjs") echo "- **$suite**: Requires ${SNARKJS_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
-                "rapidsnark") echo "- **$suite**: Requires ${RAPIDSNARK_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
-                "noir") echo "- **$suite**: Requires ${NOIR_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
-                "gnark") echo "- **$suite**: Requires ${GNARK_MIN_MEMORY}MB memory" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "snarkjs") echo "- **$suite**: Requires ${SNARKJS_MIN_MEMORY}MB memory (15GB system)" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "rapidsnark") echo "- **$suite**: Requires ${RAPIDSNARK_MIN_MEMORY}MB memory (15GB system)" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "noir") echo "- **$suite**: Requires ${NOIR_MIN_MEMORY}MB memory (2GB system)" >> "$RESULTS_DIR/performance_comparison.md" ;;
+                "gnark") echo "- **$suite**: Requires ${GNARK_MIN_MEMORY}MB memory (2GB system)" >> "$RESULTS_DIR/performance_comparison.md" ;;
             esac
         done
     fi
@@ -321,5 +323,9 @@ EOF
 else
     warn "No suites completed successfully - no performance comparison generated"
 fi
+
+# Final cleanup to free disk space
+log "Performing final Docker cleanup..."
+docker system prune -f 2>/dev/null || true
 
 log "Benchmark suite execution completed successfully!" 
