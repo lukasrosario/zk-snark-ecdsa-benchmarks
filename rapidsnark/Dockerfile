@@ -41,10 +41,11 @@ RUN git clone https://github.com/iden3/circom.git && \
 # Install snarkjs
 RUN npm install -g snarkjs
 
-# Install hyperfine
-RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_arm64.deb && \
-    dpkg -i hyperfine_1.19.0_arm64.deb && \
-    rm hyperfine_1.19.0_arm64.deb
+# Install hyperfine (detect architecture dynamically)
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_${ARCH}.deb && \
+    dpkg -i hyperfine_1.19.0_${ARCH}.deb && \
+    rm hyperfine_1.19.0_${ARCH}.deb
 
 RUN mkdir -p /app
 

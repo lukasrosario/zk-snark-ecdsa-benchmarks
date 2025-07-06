@@ -191,9 +191,9 @@ EOF
     terraform output -json > ../instance_outputs.json
     
     # Extract instance IPs
-    T4G_IP=$(terraform output -raw instance_info | jq -r '.t4g_medium.public_ip')
-    C7G_IP=$(terraform output -raw instance_info | jq -r '.c7g_xlarge.public_ip')
-    C7I_IP=$(terraform output -raw instance_info | jq -r '.c7i_2xlarge.public_ip')
+    T4G_IP=$(terraform output -json instance_info | jq -r '.t4g_medium.public_ip')
+    C7G_IP=$(terraform output -json instance_info | jq -r '.c7g_xlarge.public_ip')
+    C7I_IP=$(terraform output -json instance_info | jq -r '.c7i_2xlarge.public_ip')
     
     log "Instances deployed:"
     log "  t4g.medium:   $T4G_IP"

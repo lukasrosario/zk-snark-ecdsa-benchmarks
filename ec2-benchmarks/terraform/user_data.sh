@@ -16,7 +16,10 @@ apt-get install -y \
     git \
     unzip \
     jq \
-    awscli
+    awscli \
+    build-essential \
+    pkg-config \
+    libssl-dev
 
 # Install Docker
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
@@ -30,10 +33,6 @@ usermod -aG docker ubuntu
 # Start and enable Docker
 systemctl start docker
 systemctl enable docker
-
-# Install Rust and Cargo for test case generation
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source /home/ubuntu/.cargo/env
 
 # Install Node.js
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -96,17 +95,24 @@ chown -R ubuntu:ubuntu /mnt/benchmark-data
 # Performance tuning
 echo 'vm.swappiness=1' >> /etc/sysctl.conf
 echo 'vm.overcommit_memory=1' >> /etc/sysctl.conf
-echo 'kernel.sched_migration_cost_ns=5000000' >> /etc/sysctl.conf
 
 # Apply sysctl settings
 sysctl -p
 
-# Set CPU governor to performance
-echo 'performance' | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+# Set CPU governor to performance (if supported)
+for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    if [ -f "$cpu" ]; then
+        echo 'performance' > "$cpu"
+    fi
+done
 
 # Create benchmark user environment
 sudo -u ubuntu bash << 'EOF'
 cd /home/ubuntu
+
+# Install Rust and Cargo for the ubuntu user
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source /home/ubuntu/.cargo/env
 
 # Clone the benchmark repository
 git clone -b lukas/cloud https://github.com/lukasrosario/zk-snark-ecdsa-benchmarks.git

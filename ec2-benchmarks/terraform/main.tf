@@ -74,19 +74,24 @@ data "aws_subnet" "selected" {
   id = var.subnet_id
 }
 
-# Get the latest Ubuntu 22.04 LTS AMI
+# Get the latest Ubuntu 22.04 LTS AMI (x86_64)
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-*"]
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
   }
 }
 
@@ -120,6 +125,7 @@ resource "aws_instance" "t4g_medium" {
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.benchmark_sg.id]
+  associate_public_ip_address = true
   user_data              = local.user_data
 
   root_block_device {
@@ -142,6 +148,7 @@ resource "aws_instance" "c7g_xlarge" {
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.benchmark_sg.id]
+  associate_public_ip_address = true
   user_data              = local.user_data
 
   root_block_device {
@@ -164,6 +171,7 @@ resource "aws_instance" "c7i_2xlarge" {
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.benchmark_sg.id]
+  associate_public_ip_address = true
   user_data              = local.user_data
 
   root_block_device {
