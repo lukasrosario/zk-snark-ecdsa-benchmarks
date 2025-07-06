@@ -54,7 +54,11 @@ EOF
 # - Node.js heap size is pre-calculated and passed to containers via environment variables
 # - This ensures no memory conflicts and optimal performance
 # Calculate memory allocation strategy based on available resources
-if [ "$MEMORY_GB" -ge 15 ]; then
+if [ "$MEMORY_GB" -ge 30 ]; then
+    # 30+ GB instances: Node.js gets 24GB, Docker gets 28GB (leaves 4GB for system + container overhead)
+    NODE_MEMORY_MB=24576
+    DOCKER_MEMORY_LIMIT="28g"
+elif [ "$MEMORY_GB" -ge 15 ]; then
     # 16+ GB instances: Node.js gets 12GB, Docker gets 14GB (leaves 2GB for system + container overhead)
     NODE_MEMORY_MB=12288
     DOCKER_MEMORY_LIMIT="14g"
