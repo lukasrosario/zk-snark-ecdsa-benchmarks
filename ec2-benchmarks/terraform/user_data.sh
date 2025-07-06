@@ -109,7 +109,7 @@ sudo -u ubuntu bash << 'EOF'
 cd /home/ubuntu
 
 # Clone the benchmark repository
-git clone https://github.com/lukasrosario/zk-snark-ecdsa-benchmarks.git
+git clone -b lukas/cloud https://github.com/lukasrosario/zk-snark-ecdsa-benchmarks.git
 cd zk-snark-ecdsa-benchmarks
 
 # Download powers of tau file
