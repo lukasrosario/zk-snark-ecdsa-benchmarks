@@ -193,12 +193,14 @@ EOF
     # Extract instance IPs
     T4G_IP=$(terraform output -json instance_info | jq -r '.t4g_medium.public_ip')
     C7G_IP=$(terraform output -json instance_info | jq -r '.c7g_xlarge.public_ip')
-    C7I_IP=$(terraform output -json instance_info | jq -r '.c7i_2xlarge.public_ip')
+    C7I_2X_IP=$(terraform output -json instance_info | jq -r '.c7i_2xlarge.public_ip')
+    C7I_4X_IP=$(terraform output -json instance_info | jq -r '.c7i_4xlarge.public_ip')
     
     log "Instances deployed:"
     log "  t4g.medium:   $T4G_IP"
     log "  c7g.xlarge:   $C7G_IP"
-    log "  c7i.2xlarge:  $C7I_IP"
+    log "  c7i.2xlarge:  $C7I_2X_IP"
+    log "  c7i.4xlarge:  $C7I_4X_IP"
     
     # Wait for instances to be ready
     log "Waiting for instances to complete setup..."
@@ -229,7 +231,8 @@ EOF
     # Wait for all instances in parallel
     wait_for_instance "$T4G_IP" "t4g.medium" &
     wait_for_instance "$C7G_IP" "c7g.xlarge" &
-    wait_for_instance "$C7I_IP" "c7i.2xlarge" &
+    wait_for_instance "$C7I_2X_IP" "c7i.2xlarge" &
+    wait_for_instance "$C7I_4X_IP" "c7i.4xlarge" &
     
     # Wait for all background jobs to complete
     wait
@@ -243,12 +246,14 @@ else
     if [ -f "../instance_outputs.json" ]; then
         T4G_IP=$(jq -r '.instance_info.value.t4g_medium.public_ip' ../instance_outputs.json)
         C7G_IP=$(jq -r '.instance_info.value.c7g_xlarge.public_ip' ../instance_outputs.json)
-        C7I_IP=$(jq -r '.instance_info.value.c7i_2xlarge.public_ip' ../instance_outputs.json)
+        C7I_2X_IP=$(jq -r '.instance_info.value.c7i_2xlarge.public_ip' ../instance_outputs.json)
+        C7I_4X_IP=$(jq -r '.instance_info.value.c7i_4xlarge.public_ip' ../instance_outputs.json)
         
         log "Using existing instances:"
         log "  t4g.medium:   $T4G_IP"
         log "  c7g.xlarge:   $C7G_IP"
-        log "  c7i.2xlarge:  $C7I_IP"
+        log "  c7i.2xlarge:  $C7I_2X_IP"
+        log "  c7i.4xlarge:  $C7I_4X_IP"
     else
         error "No existing instance information found. Cannot skip deployment."
         exit 1
@@ -282,7 +287,8 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
     # Start benchmarks on all instances in parallel
     run_benchmark_on_instance "$T4G_IP" "t4g_medium"
     run_benchmark_on_instance "$C7G_IP" "c7g_xlarge"  
-    run_benchmark_on_instance "$C7I_IP" "c7i_2xlarge"
+    run_benchmark_on_instance "$C7I_2X_IP" "c7i_2xlarge"
+    run_benchmark_on_instance "$C7I_4X_IP" "c7i_4xlarge"
     
     log "All benchmarks started. Waiting for completion..."
     
@@ -324,7 +330,8 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
     # Collect results from all instances
     collect_results "$T4G_IP" "t4g_medium"
     collect_results "$C7G_IP" "c7g_xlarge"
-    collect_results "$C7I_IP" "c7i_2xlarge"
+    collect_results "$C7I_2X_IP" "c7i_2xlarge"
+    collect_results "$C7I_4X_IP" "c7i_4xlarge"
     
     # Generate comparison report
     log "Generating cross-instance comparison report..."
@@ -339,13 +346,14 @@ This report compares the performance of ZK-SNARK ECDSA implementations across di
 - **t4g.medium**: ARM Graviton2, 2 vCPUs, 4GB RAM
 - **c7g.xlarge**: ARM Graviton3, 4 vCPUs, 8GB RAM  
 - **c7i.2xlarge**: Intel, 8 vCPUs, 16GB RAM
+- **c7i.4xlarge**: Intel, 16 vCPUs, 32GB RAM
 
 ## Performance Summary
 
 EOF
     
     # Add performance data for each instance type
-    for instance_type in t4g_medium c7g_xlarge c7i_2xlarge; do
+    for instance_type in t4g_medium c7g_xlarge c7i_2xlarge c7i_4xlarge; do
         if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/summary.json" ]; then
             echo "### $instance_type" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"

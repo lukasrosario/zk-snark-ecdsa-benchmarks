@@ -31,10 +31,11 @@ echo -e "${BLUE}╚════════════════════�
 echo
 
 echo "This script will help you set up and run ZK-SNARK ECDSA benchmarks on EC2."
-echo "The benchmarks will run on three instance types:"
+echo "The benchmarks will run on four instance types:"
 echo "  • t4g.medium (ARM Graviton2, 2 vCPUs, 4GB RAM)"
 echo "  • c7g.xlarge (ARM Graviton3, 4 vCPUs, 8GB RAM)"  
 echo "  • c7i.2xlarge (Intel, 8 vCPUs, 16GB RAM)"
+echo "  • c7i.4xlarge (Intel, 16 vCPUs, 32GB RAM)"
 echo
 
 # Step 1: Setup check
@@ -129,8 +130,8 @@ echo "  Auto Cleanup:   $CLEANUP"
 
 echo
 echo "Estimated costs:"
-echo "  • Instance costs: ~\$2-5 for 2-4 hour benchmark run"
-echo "  • Storage costs: ~\$0.50/month for EBS volumes (if kept)"
+echo "  • Instance costs: ~\$4-8 for 2-4 hour benchmark run"
+echo "  • Storage costs: ~\$0.65/month for EBS volumes (if kept)"
 
 echo
 read -p "Proceed with deployment? [Y/n]: " PROCEED
@@ -219,7 +220,7 @@ if [ -n "$RESULTS_DIR" ]; then
     echo
     echo "Key files:"
     echo "  • Cross-instance comparison: $RESULTS_DIR/cross_instance_comparison.md"
-    echo "  • Individual results: $RESULTS_DIR/{t4g_medium,c7g_xlarge,c7i_2xlarge}/"
+    echo "  • Individual results: $RESULTS_DIR/{t4g_medium,c7g_xlarge,c7i_2xlarge,c7i_4xlarge}/"
     
     if command -v open &> /dev/null; then
         read -p "Open results directory? [Y/n]: " OPEN_RESULTS
