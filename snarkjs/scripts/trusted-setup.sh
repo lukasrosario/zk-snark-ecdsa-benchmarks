@@ -23,7 +23,7 @@ fi
 
 echo "✅ Powers of tau file found, proceeding with setup."
 echo "📝 Generating proving key and verification key..."
-snarkjs zkey new /out/setup/circuit.r1cs pot22_final.ptau /out/setup/circuit.zkey
+NODE_OPTIONS=--max_old_space_size=16384 snarkjs zkey new /out/setup/circuit.r1cs pot22_final.ptau /out/setup/circuit.zkey
 
 echo "✅ Proving key and verification key generated successfully!"
 
