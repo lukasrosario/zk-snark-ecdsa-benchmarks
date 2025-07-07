@@ -333,18 +333,48 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                     if [ -d "$LATEST_RESULTS/$suite" ]; then
                         mkdir -p "$SUMMARY_DIR/$suite"
                         
-                        # Copy benchmark summary files (small JSON files with timing data)
-                        find "$LATEST_RESULTS/$suite" -name "*benchmark*.json" -size -1M -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                        # Copy ALL benchmark JSON files (proving times, verification times, etc.)
+                        find "$LATEST_RESULTS/$suite" -name "*benchmark*.json" -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
                         
-                        # Copy gas reports (typically small)
-                        if [ -d "$LATEST_RESULTS/$suite/gas-reports/reports" ]; then
-                            mkdir -p "$SUMMARY_DIR/$suite/gas-reports"
-                            cp -r "$LATEST_RESULTS/$suite/gas-reports/reports" "$SUMMARY_DIR/$suite/gas-reports/" 2>/dev/null
+                        # Copy gas reports from multiple possible locations
+                        for gas_path in "gas-reports/reports" "gas" "gas-reports" "benchmarks" "gas-benchmark" "verification"; do
+                            if [ -d "$LATEST_RESULTS/$suite/$gas_path" ]; then
+                                mkdir -p "$SUMMARY_DIR/$suite/gas-reports"
+                                cp -r "$LATEST_RESULTS/$suite/$gas_path"/* "$SUMMARY_DIR/$suite/gas-reports/" 2>/dev/null
+                                echo "Found gas reports in $suite/$gas_path"
+                            fi
+                        done
+                        
+                        # For Noir specifically, also look for UltraPlonk verifier gas data
+                        if [ "$suite" = "noir" ]; then
+                            find "$LATEST_RESULTS/$suite" -name "*verifier*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                            find "$LATEST_RESULTS/$suite" -name "*gas*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                            echo "Collected Noir-specific verifier and gas files"
                         fi
                         
-                        echo "Collected $suite summaries"
+                        # Capture proving time summaries from log outputs if available
+                        if [ -f "$LATEST_RESULTS/$suite/proving_summary.txt" ]; then
+                            cp "$LATEST_RESULTS/$suite/proving_summary.txt" "$SUMMARY_DIR/$suite/"
+                        fi
+                        
+                        # Look for any summary text files with aggregate stats
+                        find "$LATEST_RESULTS/$suite" -name "*summary*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                        
+                        echo "Collected $suite summaries and gas reports"
                     fi
                 done
+                
+                # Create a comprehensive summary JSON with proving times and gas data
+                cat > "$SUMMARY_DIR/comprehensive_summary.json" << EOF
+{
+  "instance_type": "$(cat $LATEST_RESULTS/summary.json | jq -r '.instance_type')",
+  "cpu_cores": $(cat $LATEST_RESULTS/summary.json | jq -r '.cpu_cores'),
+  "memory_gb": $(cat $LATEST_RESULTS/summary.json | jq -r '.memory_gb'),
+  "proving_performance": {},
+  "gas_consumption": {},
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
                 
                 echo "Summary collection complete"
             else
@@ -411,6 +441,40 @@ EOF
             echo "- **Total Duration**: ${total_duration}s" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             [ -n "$completed_suites" ] && echo "- **Completed Suites**: $completed_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             [ -n "$skipped_suites" ] && echo "- **Skipped Suites**: $skipped_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            
+            # Add proving times and gas consumption for each suite
+            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "#### 🚀 Proving Performance" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            
+            for suite in snarkjs rapidsnark noir gnark; do
+                if [ -d "$RESULTS_COLLECTION_DIR/$instance_type/$suite" ]; then
+                    # Look for proving time data in benchmark files
+                    proving_time=""
+                    gas_cost=""
+                    
+                    # Search for aggregate statistics in any summary files
+                    if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*summary* ]; then
+                        proving_time=$(grep -o "Average Time: [0-9.]\+" "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*summary* 2>/dev/null | head -1 | grep -o "[0-9.]\+")
+                    fi
+                    
+                    # Search for gas data in JSON files
+                    for gas_file in "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*.json "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/gas-reports/*.json; do
+                        if [ -f "$gas_file" ]; then
+                            gas_cost=$(jq -r '.verification_gas // .gas_used // .gasUsed // .gas // empty' "$gas_file" 2>/dev/null | head -1)
+                            [ -n "$gas_cost" ] && break
+                        fi
+                    done
+                    
+                    if [ -n "$proving_time" ] || [ -n "$gas_cost" ]; then
+                        echo "**$suite:**" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+                        [ -n "$proving_time" ] && echo "- Proving Time: ${proving_time}s" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+                        [ -n "$gas_cost" ] && echo "- Gas Cost: $gas_cost" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+                        echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+                    fi
+                fi
+            done
+            
             echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
         else
             # Debug: show what's actually in the directory
@@ -471,16 +535,18 @@ def extract_proving_times(results_dir):
         
         # Look for benchmark files in each suite
         for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
-            suite_dir = instance_dir / suite / 'benchmarks'
+            suite_dir = instance_dir / suite
             if suite_dir.exists():
-                # Look for proof benchmark files
-                for benchmark_file in suite_dir.glob('*proof*benchmark*.json'):
+                times = []
+                
+                # Look for benchmark JSON files with proving times
+                for benchmark_file in suite_dir.glob('*benchmark*.json'):
                     try:
                         with open(benchmark_file) as f:
                             data = json.load(f)
+                            
+                            # Handle different JSON structures
                             if 'results' in data:
-                                # Extract timing data
-                                times = []
                                 for result in data['results']:
                                     if 'times' in result:
                                         times.extend(result['times'])
@@ -488,15 +554,48 @@ def extract_proving_times(results_dir):
                                         times.append(result['time'])
                                     elif 'elapsed' in result:
                                         times.append(result['elapsed'])
-                                
-                                if times:
-                                    proving_times[instance_name][suite] = {
-                                        'mean': np.mean(times),
-                                        'median': np.median(times),
-                                        'times': times
-                                    }
+                            elif 'benchmarks' in data:
+                                for bench in data['benchmarks']:
+                                    if 'time' in bench:
+                                        times.append(bench['time'])
+                            elif 'command' in data and 'time' in data:
+                                times.append(data['time'])
+                            elif isinstance(data, list):
+                                for item in data:
+                                    if isinstance(item, dict) and 'time' in item:
+                                        times.append(item['time'])
+                            
                     except Exception as e:
                         print(f"Error reading {benchmark_file}: {e}")
+                
+                # Look for aggregate statistics in summary files
+                for summary_file in suite_dir.glob('*summary*'):
+                    try:
+                        with open(summary_file) as f:
+                            content = f.read()
+                            # Look for aggregate statistics like "Average Time: 4.126 ± 0.015 seconds"
+                            import re
+                            avg_match = re.search(r'Average Time:\s*([0-9.]+)', content)
+                            if avg_match:
+                                avg_time = float(avg_match.group(1))
+                                proving_times[instance_name][suite] = {
+                                    'mean': avg_time,
+                                    'median': avg_time,  # Use average as approximation
+                                    'times': [avg_time]  # Single value for aggregate
+                                }
+                                print(f"Found aggregate stats for {suite}: {avg_time}s average")
+                                break
+                    except Exception as e:
+                        print(f"Error reading summary {summary_file}: {e}")
+                
+                # If we found individual times, calculate statistics
+                if times and suite not in proving_times[instance_name]:
+                    proving_times[instance_name][suite] = {
+                        'mean': np.mean(times),
+                        'median': np.median(times),
+                        'times': times
+                    }
+                    print(f"Calculated stats for {suite}: {len(times)} measurements, avg {np.mean(times):.3f}s")
     
     return proving_times
 
@@ -513,26 +612,65 @@ def extract_gas_consumption(results_dir):
         
         # Look for gas reports in each suite
         for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
-            gas_reports_dir = instance_dir / suite / 'gas-reports' / 'reports'
-            if gas_reports_dir.exists():
-                for report_file in gas_reports_dir.glob('*.json'):
-                    try:
-                        with open(report_file) as f:
-                            data = json.load(f)
-                            
-                            # Extract gas usage data
-                            if 'verification_gas' in data:
-                                gas_data[instance_name][suite] = data['verification_gas']
-                            elif 'gas_used' in data:
-                                gas_data[instance_name][suite] = data['gas_used']
-                            elif isinstance(data, dict) and 'gasUsed' in str(data):
-                                # Try to find gas usage in nested structure
-                                for key, value in data.items():
-                                    if isinstance(value, dict) and 'gasUsed' in value:
-                                        gas_data[instance_name][suite] = value['gasUsed']
-                                        break
-                    except Exception as e:
-                        print(f"Error reading {report_file}: {e}")
+            suite_dir = instance_dir / suite
+            if not suite_dir.exists():
+                continue
+                
+            # Look in multiple possible locations for gas data
+            gas_locations = [
+                suite_dir / 'gas-reports',
+                suite_dir / 'gas',
+                suite_dir / 'benchmarks',
+                suite_dir
+            ]
+            
+            for gas_dir in gas_locations:
+                if gas_dir.exists():
+                    # Look for JSON files with gas data
+                    for report_file in gas_dir.rglob('*.json'):
+                        try:
+                            with open(report_file) as f:
+                                data = json.load(f)
+                                
+                                # Extract gas usage data from various formats
+                                gas_value = None
+                                
+                                if 'verification_gas' in data:
+                                    gas_value = data['verification_gas']
+                                elif 'gas_used' in data:
+                                    gas_value = data['gas_used']
+                                elif 'gasUsed' in data:
+                                    gas_value = data['gasUsed']
+                                elif 'gas' in data:
+                                    gas_value = data['gas']
+                                elif isinstance(data, dict):
+                                    # Look for gas usage in nested structures
+                                    for key, value in data.items():
+                                        if isinstance(value, dict):
+                                            if 'gasUsed' in value:
+                                                gas_value = value['gasUsed']
+                                                break
+                                            elif 'gas' in value:
+                                                gas_value = value['gas']
+                                                break
+                                    
+                                    # Look for Foundry-style gas reports
+                                    if 'test' in str(data).lower() and 'gas' in str(data).lower():
+                                        for test_key, test_data in data.items():
+                                            if isinstance(test_data, dict) and 'gas' in test_data:
+                                                gas_value = test_data['gas']
+                                                break
+                                
+                                if gas_value is not None:
+                                    gas_data[instance_name][suite] = gas_value
+                                    print(f"Found gas data for {suite}: {gas_value}")
+                                    break
+                                    
+                        except Exception as e:
+                            print(f"Error reading gas report {report_file}: {e}")
+                    
+                    if suite in gas_data[instance_name]:
+                        break  # Found gas data for this suite, move to next
     
     return gas_data
 
