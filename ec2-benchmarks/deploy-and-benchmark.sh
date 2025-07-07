@@ -301,37 +301,69 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
     RESULTS_COLLECTION_DIR="$SCRIPT_DIR/collected_results_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$RESULTS_COLLECTION_DIR"
     
-    # Collect results from all instances
+    # Generate summary and collect only lightweight files from instances
     collect_results() {
         local ip=$1
         local instance_type=$2
         
-        log "Collecting results from $instance_type..."
+        log "Generating summary and collecting lightweight results from $instance_type..."
         
-        # Get the latest results directory
-        LATEST_RESULTS=$(ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
-            "ls -t /mnt/benchmark-data/results_* | head -n1" 2>/dev/null || echo "")
+        # Create instance-specific directory
+        mkdir -p "$RESULTS_COLLECTION_DIR/$instance_type"
         
-        if [ -n "$LATEST_RESULTS" ]; then
-            # Copy the entire results directory to avoid wildcard issues with mixed files/directories
-            if scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
-                ubuntu@$ip:"$LATEST_RESULTS" \
-                "$RESULTS_COLLECTION_DIR/" 2>/dev/null; then
+        # Create a summary generation script on the instance
+        ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip << 'REMOTE_SCRIPT'
+            # Find the latest results directory
+            LATEST_RESULTS=$(find /mnt/benchmark-data -name 'results_*' -type d | sort -r | head -n1)
+            
+            if [ -n "$LATEST_RESULTS" ]; then
+                echo "Found results: $LATEST_RESULTS"
                 
-                # Get the directory name and rename it to match instance type
-                RESULTS_DIR_NAME=$(basename "$LATEST_RESULTS")
-                if [ -d "$RESULTS_COLLECTION_DIR/$RESULTS_DIR_NAME" ]; then
-                    mv "$RESULTS_COLLECTION_DIR/$RESULTS_DIR_NAME" "$RESULTS_COLLECTION_DIR/$instance_type"
-                    log "Results collected from $instance_type"
-                else
-                    warn "Results directory not found after copy for $instance_type"
-                fi
+                # Copy key summary files to a lightweight collection directory
+                SUMMARY_DIR="/tmp/benchmark_summary"
+                mkdir -p "$SUMMARY_DIR"
+                
+                # Copy essential files
+                cp "$LATEST_RESULTS/summary.json" "$SUMMARY_DIR/" 2>/dev/null || echo "No summary.json"
+                cp "$LATEST_RESULTS/system_info.json" "$SUMMARY_DIR/" 2>/dev/null || echo "No system_info.json"
+                cp "$LATEST_RESULTS/performance_comparison.md" "$SUMMARY_DIR/" 2>/dev/null || echo "No performance_comparison.md"
+                
+                # Extract key benchmark metrics from each suite
+                for suite in snarkjs rapidsnark noir gnark; do
+                    if [ -d "$LATEST_RESULTS/$suite" ]; then
+                        mkdir -p "$SUMMARY_DIR/$suite"
+                        
+                        # Copy benchmark summary files (small JSON files with timing data)
+                        find "$LATEST_RESULTS/$suite" -name "*benchmark*.json" -size -1M -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                        
+                        # Copy gas reports (typically small)
+                        if [ -d "$LATEST_RESULTS/$suite/gas-reports/reports" ]; then
+                            mkdir -p "$SUMMARY_DIR/$suite/gas-reports"
+                            cp -r "$LATEST_RESULTS/$suite/gas-reports/reports" "$SUMMARY_DIR/$suite/gas-reports/" 2>/dev/null
+                        fi
+                        
+                        echo "Collected $suite summaries"
+                    fi
+                done
+                
+                echo "Summary collection complete"
             else
-                warn "Failed to copy results from $instance_type"
+                echo "No results directory found"
             fi
+REMOTE_SCRIPT
+        
+        # Copy the lightweight summary files
+        if scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
+            ubuntu@$ip:"/tmp/benchmark_summary/*" \
+            "$RESULTS_COLLECTION_DIR/$instance_type/" 2>/dev/null; then
+            log "Lightweight results collected from $instance_type"
         else
-            warn "No results found on $instance_type"
+            warn "Failed to collect summary from $instance_type"
         fi
+        
+        # Clean up remote temporary directory
+        ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
+            "rm -rf /tmp/benchmark_summary" 2>/dev/null || true
     }
     
     # Collect results from all instances
