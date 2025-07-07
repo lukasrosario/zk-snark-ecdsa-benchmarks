@@ -399,6 +399,247 @@ EOF
     log "Cross-instance comparison saved to: $RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
     log "All results collected in: $RESULTS_COLLECTION_DIR"
     
+    # Generate performance plots (optional - won't break if it fails)
+    log "Attempting to generate performance plots..."
+    generate_plots() {
+        # Check if Python and required libraries are available
+        if ! command -v python3 &> /dev/null; then
+            warn "Python3 not found - skipping plot generation"
+            return 1
+        fi
+        
+        # Create a Python script for plotting
+        cat > "$RESULTS_COLLECTION_DIR/generate_plots.py" << 'PLOT_SCRIPT'
+#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+try:
+    import matplotlib.pyplot as plt
+    import numpy as np
+except ImportError:
+    print("matplotlib not available - skipping plots")
+    sys.exit(1)
+
+# Set up matplotlib for headless operation
+plt.switch_backend('Agg')
+
+def extract_proving_times(results_dir):
+    """Extract proving times from benchmark results."""
+    proving_times = {}
+    
+    for instance_dir in Path(results_dir).iterdir():
+        if not instance_dir.is_dir():
+            continue
+            
+        instance_name = instance_dir.name
+        proving_times[instance_name] = {}
+        
+        # Look for benchmark files in each suite
+        for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
+            suite_dir = instance_dir / suite / 'benchmarks'
+            if suite_dir.exists():
+                # Look for proof benchmark files
+                for benchmark_file in suite_dir.glob('*proof*benchmark*.json'):
+                    try:
+                        with open(benchmark_file) as f:
+                            data = json.load(f)
+                            if 'results' in data:
+                                # Extract timing data
+                                times = []
+                                for result in data['results']:
+                                    if 'times' in result:
+                                        times.extend(result['times'])
+                                    elif 'time' in result:
+                                        times.append(result['time'])
+                                    elif 'elapsed' in result:
+                                        times.append(result['elapsed'])
+                                
+                                if times:
+                                    proving_times[instance_name][suite] = {
+                                        'mean': np.mean(times),
+                                        'median': np.median(times),
+                                        'times': times
+                                    }
+                    except Exception as e:
+                        print(f"Error reading {benchmark_file}: {e}")
+    
+    return proving_times
+
+def extract_gas_consumption(results_dir):
+    """Extract gas consumption from gas reports."""
+    gas_data = {}
+    
+    for instance_dir in Path(results_dir).iterdir():
+        if not instance_dir.is_dir():
+            continue
+            
+        instance_name = instance_dir.name
+        gas_data[instance_name] = {}
+        
+        # Look for gas reports in each suite
+        for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
+            gas_reports_dir = instance_dir / suite / 'gas-reports' / 'reports'
+            if gas_reports_dir.exists():
+                for report_file in gas_reports_dir.glob('*.json'):
+                    try:
+                        with open(report_file) as f:
+                            data = json.load(f)
+                            
+                            # Extract gas usage data
+                            if 'verification_gas' in data:
+                                gas_data[instance_name][suite] = data['verification_gas']
+                            elif 'gas_used' in data:
+                                gas_data[instance_name][suite] = data['gas_used']
+                            elif isinstance(data, dict) and 'gasUsed' in str(data):
+                                # Try to find gas usage in nested structure
+                                for key, value in data.items():
+                                    if isinstance(value, dict) and 'gasUsed' in value:
+                                        gas_data[instance_name][suite] = value['gasUsed']
+                                        break
+                    except Exception as e:
+                        print(f"Error reading {report_file}: {e}")
+    
+    return gas_data
+
+def plot_proving_times(proving_times, output_dir):
+    """Generate proving time comparison plots."""
+    if not proving_times:
+        print("No proving time data found")
+        return
+    
+    # Collect data for plotting
+    instances = list(proving_times.keys())
+    suites = set()
+    for instance_data in proving_times.values():
+        suites.update(instance_data.keys())
+    suites = sorted(list(suites))
+    
+    if not suites:
+        print("No suite data found for proving times")
+        return
+    
+    # Create bar plot
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    x = np.arange(len(instances))
+    width = 0.8 / len(suites)
+    
+    for i, suite in enumerate(suites):
+        times = []
+        for instance in instances:
+            if suite in proving_times[instance]:
+                times.append(proving_times[instance][suite]['mean'])
+            else:
+                times.append(0)
+        
+        ax.bar(x + i * width, times, width, label=suite, alpha=0.8)
+    
+    ax.set_xlabel('Instance Type')
+    ax.set_ylabel('Proving Time (seconds)')
+    ax.set_title('ZK-SNARK Proving Time Comparison Across Instances')
+    ax.set_xticks(x + width * (len(suites) - 1) / 2)
+    ax.set_xticklabels(instances, rotation=45)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'proving_times_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Proving times plot saved to {output_dir / 'proving_times_comparison.png'}")
+
+def plot_gas_consumption(gas_data, output_dir):
+    """Generate gas consumption comparison plots."""
+    if not gas_data:
+        print("No gas consumption data found")
+        return
+    
+    # Collect data for plotting
+    instances = list(gas_data.keys())
+    suites = set()
+    for instance_data in gas_data.values():
+        suites.update(instance_data.keys())
+    suites = sorted(list(suites))
+    
+    if not suites:
+        print("No suite data found for gas consumption")
+        return
+    
+    # Create bar plot
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    x = np.arange(len(instances))
+    width = 0.8 / len(suites)
+    
+    for i, suite in enumerate(suites):
+        gas_values = []
+        for instance in instances:
+            if suite in gas_data[instance]:
+                gas_values.append(gas_data[instance][suite])
+            else:
+                gas_values.append(0)
+        
+        ax.bar(x + i * width, gas_values, width, label=suite, alpha=0.8)
+    
+    ax.set_xlabel('Instance Type')
+    ax.set_ylabel('Gas Consumption')
+    ax.set_title('ZK-SNARK Verification Gas Consumption Across Instances')
+    ax.set_xticks(x + width * (len(suites) - 1) / 2)
+    ax.set_xticklabels(instances, rotation=45)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    # Format y-axis for large numbers
+    ax.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'gas_consumption_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Gas consumption plot saved to {output_dir / 'gas_consumption_comparison.png'}")
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 generate_plots.py <results_directory>")
+        sys.exit(1)
+    
+    results_dir = Path(sys.argv[1])
+    
+    print("Extracting proving times...")
+    proving_times = extract_proving_times(results_dir)
+    
+    print("Extracting gas consumption data...")
+    gas_data = extract_gas_consumption(results_dir)
+    
+    print("Generating plots...")
+    plot_proving_times(proving_times, results_dir)
+    plot_gas_consumption(gas_data, results_dir)
+    
+    print("Plot generation completed!")
+
+if __name__ == "__main__":
+    main()
+PLOT_SCRIPT
+        
+        # Run the plotting script
+        if python3 "$RESULTS_COLLECTION_DIR/generate_plots.py" "$RESULTS_COLLECTION_DIR" 2>/dev/null; then
+            log "Performance plots generated successfully!"
+            log "  - Proving times: $RESULTS_COLLECTION_DIR/proving_times_comparison.png"
+            log "  - Gas consumption: $RESULTS_COLLECTION_DIR/gas_consumption_comparison.png"
+        else
+            warn "Plot generation failed - continuing without plots"
+        fi
+        
+        # Clean up the script
+        rm -f "$RESULTS_COLLECTION_DIR/generate_plots.py"
+    }
+    
+    # Try to generate plots (non-blocking)
+    generate_plots || warn "Plot generation skipped"
+    
 else
     log "Skipping benchmark execution"
 fi
