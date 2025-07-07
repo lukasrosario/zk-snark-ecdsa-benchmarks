@@ -2,7 +2,7 @@
 FROM golang:1.22-bullseye
 
 # Install system dependencies including curl, bc, jq, and hyperfine for benchmarking
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     curl \
     bc \
     jq \

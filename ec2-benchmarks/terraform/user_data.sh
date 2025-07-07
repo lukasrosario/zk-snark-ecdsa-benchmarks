@@ -6,7 +6,8 @@ apt-get update -y
 apt-get upgrade -y
 
 # Install dependencies
-apt-get install -y \
+apt-get update -y 
+apt-get install -y --fix-missing \
     apt-transport-https \
     ca-certificates \
     curl \
@@ -25,7 +26,7 @@ apt-get install -y \
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+apt-get install -y --fix-missing docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
 # Add ubuntu user to docker group
 usermod -aG docker ubuntu
@@ -36,10 +37,12 @@ systemctl enable docker
 
 # Install Node.js
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
+apt-get update -y
+apt-get install -y --fix-missing nodejs
 
 # Install Python packages for plotting
-apt-get install -y python3-pip python3-matplotlib python3-numpy
+apt-get update -y
+apt-get install -y --fix-missing python3-pip python3-matplotlib python3-numpy
 
 # Configure Docker for performance - increase memory and use all CPU cores
 cat > /etc/docker/daemon.json << EOF

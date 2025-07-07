@@ -2,7 +2,7 @@
 FROM ubuntu:22.04
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     git \
     build-essential \
     cmake \
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
 # Install Node.js and npm
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get update && \
-    apt-get install -y nodejs && \
+    apt-get install -y --fix-missing nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Install yarn

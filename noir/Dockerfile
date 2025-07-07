@@ -1,7 +1,7 @@
 FROM ubuntu:24.04 AS builder
 
 # Install system dependencies for building
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     git \
     build-essential \
     cmake \
@@ -47,7 +47,7 @@ RUN bbup
 FROM ubuntu:24.04
 
 # Install only the runtime dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --fix-missing \
     libgmp-dev \
     libsodium-dev \
     git \
