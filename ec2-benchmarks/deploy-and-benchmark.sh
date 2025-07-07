@@ -361,17 +361,37 @@ EOF
     
     # Add performance data for each instance type
     for instance_type in t4g_medium c7g_xlarge c7i_2xlarge c7i_4xlarge; do
-        if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/summary.json" ]; then
+        # Check both the expected location and debug what's actually there
+        SUMMARY_FILE="$RESULTS_COLLECTION_DIR/$instance_type/summary.json"
+        
+        if [ -f "$SUMMARY_FILE" ]; then
             echo "### $instance_type" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             
-            cpu_cores=$(jq -r '.cpu_cores' "$RESULTS_COLLECTION_DIR/$instance_type/summary.json")
-            memory_gb=$(jq -r '.memory_gb' "$RESULTS_COLLECTION_DIR/$instance_type/summary.json")
-            total_duration=$(jq -r '.total_duration_seconds' "$RESULTS_COLLECTION_DIR/$instance_type/summary.json")
+            cpu_cores=$(jq -r '.cpu_cores' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
+            memory_gb=$(jq -r '.memory_gb' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
+            total_duration=$(jq -r '.total_duration_seconds' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
+            completed_suites=$(jq -r '.suites_completed[]?' "$SUMMARY_FILE" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+            skipped_suites=$(jq -r '.suites_skipped[]?' "$SUMMARY_FILE" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
             
             echo "- **CPU Cores**: $cpu_cores" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             echo "- **Memory**: ${memory_gb}GB" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
             echo "- **Total Duration**: ${total_duration}s" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            [ -n "$completed_suites" ] && echo "- **Completed Suites**: $completed_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            [ -n "$skipped_suites" ] && echo "- **Skipped Suites**: $skipped_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+        else
+            # Debug: show what's actually in the directory
+            echo "### $instance_type" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "⚠️ **Summary file not found at**: \`$SUMMARY_FILE\`" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            
+            if [ -d "$RESULTS_COLLECTION_DIR/$instance_type" ]; then
+                echo "**Available files:**" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+                ls -la "$RESULTS_COLLECTION_DIR/$instance_type/" | sed 's/^/- /' >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            else
+                echo "**Directory not found**: \`$RESULTS_COLLECTION_DIR/$instance_type\`" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            fi
             echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
         fi
     done
