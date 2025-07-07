@@ -313,15 +313,22 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
             "ls -t /mnt/benchmark-data/results_* | head -n1" 2>/dev/null || echo "")
         
         if [ -n "$LATEST_RESULTS" ]; then
-            # Create instance-specific directory
-            mkdir -p "$RESULTS_COLLECTION_DIR/$instance_type"
-            
-            # Copy results
-            scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
-                ubuntu@$ip:"$LATEST_RESULTS/*" \
-                "$RESULTS_COLLECTION_DIR/$instance_type/"
+            # Copy the entire results directory to avoid wildcard issues with mixed files/directories
+            if scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
+                ubuntu@$ip:"$LATEST_RESULTS" \
+                "$RESULTS_COLLECTION_DIR/" 2>/dev/null; then
                 
-            log "Results collected from $instance_type"
+                # Get the directory name and rename it to match instance type
+                RESULTS_DIR_NAME=$(basename "$LATEST_RESULTS")
+                if [ -d "$RESULTS_COLLECTION_DIR/$RESULTS_DIR_NAME" ]; then
+                    mv "$RESULTS_COLLECTION_DIR/$RESULTS_DIR_NAME" "$RESULTS_COLLECTION_DIR/$instance_type"
+                    log "Results collected from $instance_type"
+                else
+                    warn "Results directory not found after copy for $instance_type"
+                fi
+            else
+                warn "Failed to copy results from $instance_type"
+            fi
         else
             warn "No results found on $instance_type"
         fi
