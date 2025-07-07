@@ -332,11 +332,11 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                 CPU_CORES=$(nproc)
                 MEMORY_GB=$(free -g | awk '/^Mem:/{print $2}')
                 
-                # Initialize summary data
-                declare -A PROVING_TIMES
-                declare -A VERIFICATION_TIMES  
-                declare -A GAS_COSTS
-                COMPLETED_SUITES=()
+                # Initialize data files for simpler parsing
+                echo "" > "/tmp/proving_times.txt"
+                echo "" > "/tmp/verification_times.txt"
+                echo "" > "/tmp/gas_costs.txt"
+                echo "" > "/tmp/completed_suites.txt"
                 
                 echo "Processing benchmark data for each suite..."
                 
@@ -349,7 +349,7 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                         if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
                             proving_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null)
                             if [ -n "$proving_time" ] && [ "$proving_time" != "null" ]; then
-                                PROVING_TIMES[$suite]=$proving_time
+                                echo "$suite:$proving_time" >> "/tmp/proving_times.txt"
                                 echo "  Proving time: ${proving_time}s"
                             fi
                         fi
@@ -358,7 +358,7 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                         if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" ]; then
                             verification_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" 2>/dev/null)
                             if [ -n "$verification_time" ] && [ "$verification_time" != "null" ]; then
-                                VERIFICATION_TIMES[$suite]=$verification_time
+                                echo "$suite:$verification_time" >> "/tmp/verification_times.txt"
                                 echo "  Verification time: ${verification_time}s"
                             fi
                         fi
@@ -372,11 +372,11 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                         fi
                         
                         if [ -n "$gas_cost" ] && [ "$gas_cost" != "null" ]; then
-                            GAS_COSTS[$suite]=$gas_cost
+                            echo "$suite:$gas_cost" >> "/tmp/gas_costs.txt"
                             echo "  Gas cost: ${gas_cost} gas"
                         fi
                         
-                        COMPLETED_SUITES+=($suite)
+                        echo "$suite" >> "/tmp/completed_suites.txt"
                     fi
                 done
                 
@@ -395,186 +395,141 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
 
 EOF
                 
-                for suite in "${COMPLETED_SUITES[@]}"; do
-                    echo "### $suite" >> "$SUMMARY_DIR/performance_summary.md"
-                    echo "" >> "$SUMMARY_DIR/performance_summary.md"
-                    
-                    if [ -n "${PROVING_TIMES[$suite]}" ]; then
-                        printf "- **Proving Time:** %.3fs\n" "${PROVING_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
+                # Read completed suites and generate sections
+                while read -r suite; do
+                    if [ -n "$suite" ]; then
+                        echo "### $suite" >> "$SUMMARY_DIR/performance_summary.md"
+                        echo "" >> "$SUMMARY_DIR/performance_summary.md"
+                        
+                        # Look for proving time
+                        proving_time=$(grep "^$suite:" /tmp/proving_times.txt 2>/dev/null | cut -d: -f2)
+                        if [ -n "$proving_time" ]; then
+                            printf "- **Proving Time:** %.3fs\n" "$proving_time" >> "$SUMMARY_DIR/performance_summary.md"
+                        fi
+                        
+                        # Look for verification time
+                        verification_time=$(grep "^$suite:" /tmp/verification_times.txt 2>/dev/null | cut -d: -f2)
+                        if [ -n "$verification_time" ]; then
+                            printf "- **Verification Time:** %.3fs\n" "$verification_time" >> "$SUMMARY_DIR/performance_summary.md"
+                        fi
+                        
+                        # Look for gas cost
+                        gas_cost=$(grep "^$suite:" /tmp/gas_costs.txt 2>/dev/null | cut -d: -f2)
+                        if [ -n "$gas_cost" ]; then
+                            printf "- **Gas Cost:** %.0f gas\n" "$gas_cost" >> "$SUMMARY_DIR/performance_summary.md"
+                        fi
+                        
+                        echo "" >> "$SUMMARY_DIR/performance_summary.md"
                     fi
-                    
-                    if [ -n "${VERIFICATION_TIMES[$suite]}" ]; then
-                        printf "- **Verification Time:** %.3fs\n" "${VERIFICATION_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
-                    fi
-                    
-                    if [ -n "${GAS_COSTS[$suite]}" ]; then
-                        printf "- **Gas Cost:** %.0f gas\n" "${GAS_COSTS[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
-                    fi
-                    
-                    echo "" >> "$SUMMARY_DIR/performance_summary.md"
-                done
+                done < /tmp/completed_suites.txt
                 
                 # Generate JSON summary for plotting
-                cat > "$SUMMARY_DIR/performance_data.json" << EOF
+                cat > "$SUMMARY_DIR/performance_data.json" << 'JSON_EOF'
 {
-  "instance_type": "$INSTANCE_TYPE",
-  "cpu_cores": $CPU_CORES,
-  "memory_gb": $MEMORY_GB,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "instance_type": "INSTANCE_TYPE_PLACEHOLDER",
+  "cpu_cores": CPU_CORES_PLACEHOLDER,
+  "memory_gb": MEMORY_GB_PLACEHOLDER,
+  "timestamp": "TIMESTAMP_PLACEHOLDER",
   "proving_times": {
-EOF
-                
-                first=true
-                for suite in "${COMPLETED_SUITES[@]}"; do
-                    if [ -n "${PROVING_TIMES[$suite]}" ]; then
-                        if [ "$first" = false ]; then
-                            echo "," >> "$SUMMARY_DIR/performance_data.json"
-                        fi
-                        printf "    \"%s\": %.3f" "$suite" "${PROVING_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
-                        first=false
-                    fi
-                done
-                
-                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
-
+PROVING_TIMES_PLACEHOLDER
   },
   "verification_times": {
-EOF
-                
-                first=true
-                for suite in "${COMPLETED_SUITES[@]}"; do
-                    if [ -n "${VERIFICATION_TIMES[$suite]}" ]; then
-                        if [ "$first" = false ]; then
-                            echo "," >> "$SUMMARY_DIR/performance_data.json"
-                        fi
-                        printf "    \"%s\": %.3f" "$suite" "${VERIFICATION_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
-                        first=false
-                    fi
-                done
-                
-                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
-
+VERIFICATION_TIMES_PLACEHOLDER
   },
   "gas_costs": {
-EOF
-                
-                first=true
-                for suite in "${COMPLETED_SUITES[@]}"; do
-                    if [ -n "${GAS_COSTS[$suite]}" ]; then
-                        if [ "$first" = false ]; then
-                            echo "," >> "$SUMMARY_DIR/performance_data.json"
-                        fi
-                        printf "    \"%s\": %.0f" "$suite" "${GAS_COSTS[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
-                        first=false
-                    fi
-                done
-                
-                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
-
+GAS_COSTS_PLACEHOLDER
+  },
+  "raw_data": {
+RAW_DATA_PLACEHOLDER
   }
 }
-EOF
+JSON_EOF
+                
+                # Replace placeholders with actual data
+                sed -i "s/INSTANCE_TYPE_PLACEHOLDER/$INSTANCE_TYPE/" "$SUMMARY_DIR/performance_data.json"
+                sed -i "s/CPU_CORES_PLACEHOLDER/$CPU_CORES/" "$SUMMARY_DIR/performance_data.json"
+                sed -i "s/MEMORY_GB_PLACEHOLDER/$MEMORY_GB/" "$SUMMARY_DIR/performance_data.json"
+                sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$SUMMARY_DIR/performance_data.json"
+                
+                # Generate proving times section
+                proving_json=""
+                while read -r line; do
+                    if [ -n "$line" ]; then
+                        suite=$(echo "$line" | cut -d: -f1)
+                        time=$(echo "$line" | cut -d: -f2)
+                        if [ -n "$proving_json" ]; then
+                            proving_json="$proving_json,"
+                        fi
+                        proving_json="$proving_json\n    \"$suite\": $time"
+                    fi
+                done < /tmp/proving_times.txt
+                sed -i "s/PROVING_TIMES_PLACEHOLDER/$proving_json/" "$SUMMARY_DIR/performance_data.json"
+                
+                # Generate verification times section
+                verification_json=""
+                while read -r line; do
+                    if [ -n "$line" ]; then
+                        suite=$(echo "$line" | cut -d: -f1)
+                        time=$(echo "$line" | cut -d: -f2)
+                        if [ -n "$verification_json" ]; then
+                            verification_json="$verification_json,"
+                        fi
+                        verification_json="$verification_json\n    \"$suite\": $time"
+                    fi
+                done < /tmp/verification_times.txt
+                sed -i "s/VERIFICATION_TIMES_PLACEHOLDER/$verification_json/" "$SUMMARY_DIR/performance_data.json"
+                
+                # Generate gas costs section
+                gas_json=""
+                while read -r line; do
+                    if [ -n "$line" ]; then
+                        suite=$(echo "$line" | cut -d: -f1)
+                        cost=$(echo "$line" | cut -d: -f2)
+                        if [ -n "$gas_json" ]; then
+                            gas_json="$gas_json,"
+                        fi
+                        gas_json="$gas_json\n    \"$suite\": $cost"
+                    fi
+                done < /tmp/gas_costs.txt
+                sed -i "s/GAS_COSTS_PLACEHOLDER/$gas_json/" "$SUMMARY_DIR/performance_data.json"
+                
+                # Generate raw data for error bars
+                raw_data_json=""
+                while read -r suite; do
+                    if [ -n "$suite" ]; then
+                        if [ -n "$raw_data_json" ]; then
+                            raw_data_json="$raw_data_json,"
+                        fi
+                        raw_data_json="$raw_data_json\n    \"$suite\": {"
+                        
+                        # Extract individual times for min/max/std calculations
+                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
+                            individual_times=$(jq -r '.results[].mean | select(. != null)' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+                            if [ -n "$individual_times" ]; then
+                                raw_data_json="$raw_data_json\n      \"proving_times\": [$individual_times]"
+                            fi
+                        fi
+                        
+                        # Extract individual verification times too
+                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" ]; then
+                            individual_times=$(jq -r '.results[].mean | select(. != null)' "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+                            if [ -n "$individual_times" ]; then
+                                raw_data_json="$raw_data_json\n      \"verification_times\": [$individual_times]"
+                            fi
+                        fi
+                        
+                        raw_data_json="$raw_data_json\n    }"
+                    fi
+                done < /tmp/completed_suites.txt
+                sed -i "s/RAW_DATA_PLACEHOLDER/$raw_data_json/" "$SUMMARY_DIR/performance_data.json"
                 
                 # Generate plots if Python is available
                 if command -v python3 &> /dev/null; then
                     echo "Generating performance plots..."
                     
-                    cat > "$SUMMARY_DIR/generate_plots.py" << 'PLOT_EOF'
-#!/usr/bin/env python3
-import json
-import matplotlib.pyplot as plt
-import numpy as np
-from pathlib import Path
-
-# Set up matplotlib for headless operation
-plt.switch_backend('Agg')
-
-# Load performance data
-with open('performance_data.json') as f:
-    data = json.load(f)
-
-instance_type = data['instance_type']
-proving_times = data['proving_times']
-verification_times = data['verification_times']
-gas_costs = data['gas_costs']
-
-# Generate proving times plot
-if proving_times:
-    suites = list(proving_times.keys())
-    times = list(proving_times.values())
-    
-    plt.figure(figsize=(10, 6))
-    bars = plt.bar(suites, times, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
-    plt.xlabel('ZK-SNARK Suite')
-    plt.ylabel('Proving Time (seconds)')
-    plt.title(f'ZK-SNARK Proving Times - {instance_type}')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for bar, time in zip(bars, times):
-        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.01,
-                f'{time:.3f}s', ha='center', va='bottom')
-    
-    plt.tight_layout()
-    plt.savefig('proving_times.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print("Generated proving_times.png")
-
-# Generate verification times plot
-if verification_times:
-    suites = list(verification_times.keys())
-    times = list(verification_times.values())
-    
-    plt.figure(figsize=(10, 6))
-    bars = plt.bar(suites, times, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
-    plt.xlabel('ZK-SNARK Suite')
-    plt.ylabel('Verification Time (seconds)')
-    plt.title(f'ZK-SNARK Verification Times - {instance_type}')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for bar, time in zip(bars, times):
-        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.01,
-                f'{time:.3f}s', ha='center', va='bottom')
-    
-    plt.tight_layout()
-    plt.savefig('verification_times.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print("Generated verification_times.png")
-
-# Generate gas costs plot
-if gas_costs:
-    suites = list(gas_costs.keys())
-    costs = list(gas_costs.values())
-    
-    plt.figure(figsize=(10, 6))
-    bars = plt.bar(suites, costs, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
-    plt.xlabel('ZK-SNARK Suite')
-    plt.ylabel('Gas Consumption')
-    plt.title(f'ZK-SNARK Gas Consumption - {instance_type}')
-    plt.xticks(rotation=45)
-    plt.grid(True, alpha=0.3)
-    plt.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
-    
-    # Add value labels on bars
-    for bar, cost in zip(bars, costs):
-        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(costs)*0.01,
-                f'{cost:.0f}', ha='center', va='bottom')
-    
-    plt.tight_layout()
-    plt.savefig('gas_consumption.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print("Generated gas_consumption.png")
-
-print("Plot generation completed!")
-PLOT_EOF
-                    
                     cd "$SUMMARY_DIR"
-                    if python3 generate_plots.py 2>/dev/null; then
+                    if python3 /home/ubuntu/zk-snark-ecdsa-benchmarks/ec2-benchmarks/generate_plots.py performance_data.json 2>/dev/null; then
                         echo "Performance plots generated successfully!"
-                        rm generate_plots.py  # Clean up
                     else
                         echo "Plot generation failed - continuing without plots"
                     fi
@@ -586,6 +541,9 @@ PLOT_EOF
                 echo "Final summary generation complete"
                 echo "Generated files:"
                 ls -la "$SUMMARY_DIR/"
+                
+                # Clean up temporary files
+                rm -f /tmp/proving_times.txt /tmp/verification_times.txt /tmp/gas_costs.txt /tmp/completed_suites.txt
                 
             else
                 echo "No results directory found"
