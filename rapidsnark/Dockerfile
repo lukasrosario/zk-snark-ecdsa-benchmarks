@@ -2,26 +2,54 @@
 FROM ubuntu:22.04
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --fix-missing \
-    git \
-    build-essential \
-    cmake \
-    libgmp-dev \
-    libsodium-dev \
-    nasm \
-    curl \
-    m4 \
-    wget \
-    jq \
-    bc \
-    vim-common \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            git \
+            build-essential \
+            cmake \
+            libgmp-dev \
+            libsodium-dev \
+            nasm \
+            curl \
+            m4 \
+            wget \
+            jq \
+            bc \
+            vim-common \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get update && \
-    apt-get install -y --fix-missing nodejs && \
-    rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+            apt-get update && \
+            apt-get install -y --fix-missing nodejs && \
+            rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install yarn
 RUN npm install -g yarn

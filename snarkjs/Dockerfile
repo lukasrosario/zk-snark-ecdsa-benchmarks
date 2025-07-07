@@ -2,14 +2,28 @@
 FROM node:20-slim
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --fix-missing \
-    git \
-    build-essential \
-    curl \
-    wget \
-    jq \
-    bc \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            git \
+            build-essential \
+            curl \
+            wget \
+            jq \
+            bc \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
