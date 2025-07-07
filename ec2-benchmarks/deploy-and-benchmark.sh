@@ -157,6 +157,7 @@ fi
 
 log "Starting EC2 benchmark deployment..."
 log "Project root: $PROJECT_ROOT"
+log "Test cases to generate: $TEST_CASES"
 
 # Check dependencies
 check_dependencies
@@ -174,6 +175,7 @@ aws_region = "$AWS_REGION"
 key_name   = "$KEY_NAME"
 subnet_id  = "$SUBNET_ID"
 vpc_id     = "$VPC_ID"
+test_cases = $TEST_CASES
 EOF
 
     # Initialize and apply Terraform
@@ -263,6 +265,7 @@ fi
 # Run benchmarks
 if [ "$SKIP_BENCHMARKS" = false ]; then
     log "=== Running Benchmarks ==="
+    log "Each EC2 instance will use $TEST_CASES test cases (generated during instance setup)"
     
     # Copy benchmark script to instances and run
     run_benchmark_on_instance() {

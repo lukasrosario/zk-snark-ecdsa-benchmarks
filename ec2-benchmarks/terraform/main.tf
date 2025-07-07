@@ -32,6 +32,12 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "test_cases" {
+  description = "Number of test cases to generate"
+  type        = number
+  default     = 10
+}
+
 # Security group for benchmark instances
 resource "aws_security_group" "benchmark_sg" {
   name_prefix = "zk-benchmark-"
@@ -115,6 +121,7 @@ data "aws_ami" "ubuntu_arm" {
 locals {
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
     volume_device_name = "/dev/nvme1n1"
+    test_cases = var.test_cases
   }))
 }
 

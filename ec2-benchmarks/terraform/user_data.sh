@@ -146,7 +146,7 @@ source /home/ubuntu/.cargo/env
 cargo build --release
 
 # Generate test cases for benchmarking
-cargo run --bin generate_test_cases -- --num-test-cases=10
+cargo run --bin generate_test_cases -- --num-test-cases=${test_cases}
 EOF
 
 # Get instance metadata
