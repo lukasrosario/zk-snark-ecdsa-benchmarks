@@ -38,6 +38,9 @@ systemctl enable docker
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 
+# Install Python packages for plotting
+apt-get install -y python3-pip python3-matplotlib python3-numpy
+
 # Configure Docker for performance - increase memory and use all CPU cores
 cat > /etc/docker/daemon.json << EOF
 {

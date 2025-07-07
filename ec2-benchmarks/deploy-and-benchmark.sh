@@ -314,7 +314,7 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
         # Create instance-specific directory
         mkdir -p "$RESULTS_COLLECTION_DIR/$instance_type"
         
-        # Create a summary generation script on the instance
+        # Create a comprehensive summary generation script on the instance
         ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip << 'REMOTE_SCRIPT'
             # Find the latest results directory
             LATEST_RESULTS=$(find /mnt/benchmark-data -name 'results_*' -type d | sort -r | head -n1)
@@ -322,81 +322,288 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
             if [ -n "$LATEST_RESULTS" ]; then
                 echo "Found results: $LATEST_RESULTS"
                 
-                # Copy key summary files to a lightweight collection directory
-                SUMMARY_DIR="/tmp/benchmark_summary"
+                # Create final summary directory
+                SUMMARY_DIR="/tmp/benchmark_final_summary"
+                rm -rf "$SUMMARY_DIR"
                 mkdir -p "$SUMMARY_DIR"
                 
-                # Copy essential files
-                cp "$LATEST_RESULTS/summary.json" "$SUMMARY_DIR/" 2>/dev/null || echo "No summary.json"
-                cp "$LATEST_RESULTS/system_info.json" "$SUMMARY_DIR/" 2>/dev/null || echo "No system_info.json"
-                cp "$LATEST_RESULTS/performance_comparison.md" "$SUMMARY_DIR/" 2>/dev/null || echo "No performance_comparison.md"
+                # Get instance info
+                INSTANCE_TYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "unknown")
+                CPU_CORES=$(nproc)
+                MEMORY_GB=$(free -g | awk '/^Mem:/{print $2}')
                 
-                # Extract key benchmark metrics from each suite
+                # Initialize summary data
+                declare -A PROVING_TIMES
+                declare -A VERIFICATION_TIMES  
+                declare -A GAS_COSTS
+                COMPLETED_SUITES=()
+                
+                echo "Processing benchmark data for each suite..."
+                
+                # Process each suite's results
                 for suite in snarkjs rapidsnark noir gnark; do
                     if [ -d "$LATEST_RESULTS/$suite" ]; then
-                        mkdir -p "$SUMMARY_DIR/$suite"
+                        echo "Processing $suite results..."
                         
-                        # Copy ALL benchmark JSON files (proving times, verification times, etc.)
-                        find "$LATEST_RESULTS/$suite" -name "*benchmark*.json" -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
-                        
-                        # Copy gas reports from multiple possible locations
-                        for gas_path in "gas-reports/reports" "gas" "gas-reports" "benchmarks" "gas-benchmark" "verification"; do
-                            if [ -d "$LATEST_RESULTS/$suite/$gas_path" ]; then
-                                mkdir -p "$SUMMARY_DIR/$suite/gas-reports"
-                                cp -r "$LATEST_RESULTS/$suite/$gas_path"/* "$SUMMARY_DIR/$suite/gas-reports/" 2>/dev/null
-                                echo "Found gas reports in $suite/$gas_path"
+                        # Extract proving times from hyperfine JSON
+                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
+                            proving_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null)
+                            if [ -n "$proving_time" ] && [ "$proving_time" != "null" ]; then
+                                PROVING_TIMES[$suite]=$proving_time
+                                echo "  Proving time: ${proving_time}s"
                             fi
-                        done
-                        
-                        # For Noir specifically, also look for UltraPlonk verifier gas data
-                        if [ "$suite" = "noir" ]; then
-                            find "$LATEST_RESULTS/$suite" -name "*verifier*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
-                            find "$LATEST_RESULTS/$suite" -name "*gas*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
-                            echo "Collected Noir-specific verifier and gas files"
                         fi
                         
-                        # Capture proving time summaries from log outputs if available
-                        if [ -f "$LATEST_RESULTS/$suite/proving_summary.txt" ]; then
-                            cp "$LATEST_RESULTS/$suite/proving_summary.txt" "$SUMMARY_DIR/$suite/"
+                        # Extract verification times from hyperfine JSON
+                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" ]; then
+                            verification_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" 2>/dev/null)
+                            if [ -n "$verification_time" ] && [ "$verification_time" != "null" ]; then
+                                VERIFICATION_TIMES[$suite]=$verification_time
+                                echo "  Verification time: ${verification_time}s"
+                            fi
                         fi
                         
-                        # Look for any summary text files with aggregate stats
-                        find "$LATEST_RESULTS/$suite" -name "*summary*" -type f -exec cp {} "$SUMMARY_DIR/$suite/" \; 2>/dev/null
+                        # Extract gas costs
+                        gas_cost=""
+                        if [ "$suite" = "noir" ] && [ -f "$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json" ]; then
+                            gas_cost=$(jq -r '[.results[].gas_used] | add / length' "$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json" 2>/dev/null)
+                        elif [ -f "$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json" ]; then
+                            gas_cost=$(jq -r '[.results[].mean] | add / length' "$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json" 2>/dev/null)
+                        fi
                         
-                        echo "Collected $suite summaries and gas reports"
+                        if [ -n "$gas_cost" ] && [ "$gas_cost" != "null" ]; then
+                            GAS_COSTS[$suite]=$gas_cost
+                            echo "  Gas cost: ${gas_cost} gas"
+                        fi
+                        
+                        COMPLETED_SUITES+=($suite)
                     fi
                 done
                 
-                # Create a comprehensive summary JSON with proving times and gas data
-                cat > "$SUMMARY_DIR/comprehensive_summary.json" << EOF
+                echo "Generating comprehensive summary report..."
+                
+                # Generate comprehensive markdown report
+                cat > "$SUMMARY_DIR/performance_summary.md" << EOF
+# ZK-SNARK ECDSA Benchmark Results
+
+**Instance:** $INSTANCE_TYPE  
+**CPU Cores:** $CPU_CORES  
+**Memory:** ${MEMORY_GB}GB  
+**Date:** $(date)
+
+## Performance Summary
+
+EOF
+                
+                for suite in "${COMPLETED_SUITES[@]}"; do
+                    echo "### $suite" >> "$SUMMARY_DIR/performance_summary.md"
+                    echo "" >> "$SUMMARY_DIR/performance_summary.md"
+                    
+                    if [ -n "${PROVING_TIMES[$suite]}" ]; then
+                        printf "- **Proving Time:** %.3fs\n" "${PROVING_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
+                    fi
+                    
+                    if [ -n "${VERIFICATION_TIMES[$suite]}" ]; then
+                        printf "- **Verification Time:** %.3fs\n" "${VERIFICATION_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
+                    fi
+                    
+                    if [ -n "${GAS_COSTS[$suite]}" ]; then
+                        printf "- **Gas Cost:** %.0f gas\n" "${GAS_COSTS[$suite]}" >> "$SUMMARY_DIR/performance_summary.md"
+                    fi
+                    
+                    echo "" >> "$SUMMARY_DIR/performance_summary.md"
+                done
+                
+                # Generate JSON summary for plotting
+                cat > "$SUMMARY_DIR/performance_data.json" << EOF
 {
-  "instance_type": "$(cat $LATEST_RESULTS/summary.json | jq -r '.instance_type')",
-  "cpu_cores": $(cat $LATEST_RESULTS/summary.json | jq -r '.cpu_cores'),
-  "memory_gb": $(cat $LATEST_RESULTS/summary.json | jq -r '.memory_gb'),
-  "proving_performance": {},
-  "gas_consumption": {},
-  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  "instance_type": "$INSTANCE_TYPE",
+  "cpu_cores": $CPU_CORES,
+  "memory_gb": $MEMORY_GB,
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "proving_times": {
+EOF
+                
+                first=true
+                for suite in "${COMPLETED_SUITES[@]}"; do
+                    if [ -n "${PROVING_TIMES[$suite]}" ]; then
+                        if [ "$first" = false ]; then
+                            echo "," >> "$SUMMARY_DIR/performance_data.json"
+                        fi
+                        printf "    \"%s\": %.3f" "$suite" "${PROVING_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
+                        first=false
+                    fi
+                done
+                
+                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
+
+  },
+  "verification_times": {
+EOF
+                
+                first=true
+                for suite in "${COMPLETED_SUITES[@]}"; do
+                    if [ -n "${VERIFICATION_TIMES[$suite]}" ]; then
+                        if [ "$first" = false ]; then
+                            echo "," >> "$SUMMARY_DIR/performance_data.json"
+                        fi
+                        printf "    \"%s\": %.3f" "$suite" "${VERIFICATION_TIMES[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
+                        first=false
+                    fi
+                done
+                
+                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
+
+  },
+  "gas_costs": {
+EOF
+                
+                first=true
+                for suite in "${COMPLETED_SUITES[@]}"; do
+                    if [ -n "${GAS_COSTS[$suite]}" ]; then
+                        if [ "$first" = false ]; then
+                            echo "," >> "$SUMMARY_DIR/performance_data.json"
+                        fi
+                        printf "    \"%s\": %.0f" "$suite" "${GAS_COSTS[$suite]}" >> "$SUMMARY_DIR/performance_data.json"
+                        first=false
+                    fi
+                done
+                
+                cat >> "$SUMMARY_DIR/performance_data.json" << EOF
+
+  }
 }
 EOF
                 
-                echo "Summary collection complete"
+                # Generate plots if Python is available
+                if command -v python3 &> /dev/null; then
+                    echo "Generating performance plots..."
+                    
+                    cat > "$SUMMARY_DIR/generate_plots.py" << 'PLOT_EOF'
+#!/usr/bin/env python3
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+from pathlib import Path
+
+# Set up matplotlib for headless operation
+plt.switch_backend('Agg')
+
+# Load performance data
+with open('performance_data.json') as f:
+    data = json.load(f)
+
+instance_type = data['instance_type']
+proving_times = data['proving_times']
+verification_times = data['verification_times']
+gas_costs = data['gas_costs']
+
+# Generate proving times plot
+if proving_times:
+    suites = list(proving_times.keys())
+    times = list(proving_times.values())
+    
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(suites, times, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
+    plt.xlabel('ZK-SNARK Suite')
+    plt.ylabel('Proving Time (seconds)')
+    plt.title(f'ZK-SNARK Proving Times - {instance_type}')
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    
+    # Add value labels on bars
+    for bar, time in zip(bars, times):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.01,
+                f'{time:.3f}s', ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.savefig('proving_times.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("Generated proving_times.png")
+
+# Generate verification times plot
+if verification_times:
+    suites = list(verification_times.keys())
+    times = list(verification_times.values())
+    
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(suites, times, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
+    plt.xlabel('ZK-SNARK Suite')
+    plt.ylabel('Verification Time (seconds)')
+    plt.title(f'ZK-SNARK Verification Times - {instance_type}')
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    
+    # Add value labels on bars
+    for bar, time in zip(bars, times):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.01,
+                f'{time:.3f}s', ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.savefig('verification_times.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("Generated verification_times.png")
+
+# Generate gas costs plot
+if gas_costs:
+    suites = list(gas_costs.keys())
+    costs = list(gas_costs.values())
+    
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(suites, costs, alpha=0.8, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
+    plt.xlabel('ZK-SNARK Suite')
+    plt.ylabel('Gas Consumption')
+    plt.title(f'ZK-SNARK Gas Consumption - {instance_type}')
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    plt.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
+    
+    # Add value labels on bars
+    for bar, cost in zip(bars, costs):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(costs)*0.01,
+                f'{cost:.0f}', ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.savefig('gas_consumption.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print("Generated gas_consumption.png")
+
+print("Plot generation completed!")
+PLOT_EOF
+                    
+                    cd "$SUMMARY_DIR"
+                    if python3 generate_plots.py 2>/dev/null; then
+                        echo "Performance plots generated successfully!"
+                        rm generate_plots.py  # Clean up
+                    else
+                        echo "Plot generation failed - continuing without plots"
+                    fi
+                    cd -
+                else
+                    echo "Python3 not available - skipping plot generation"
+                fi
+                
+                echo "Final summary generation complete"
+                echo "Generated files:"
+                ls -la "$SUMMARY_DIR/"
+                
             else
                 echo "No results directory found"
             fi
 REMOTE_SCRIPT
         
-        # Copy the lightweight summary files
+        # Copy only the final summary files
         if scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
-            ubuntu@$ip:"/tmp/benchmark_summary/*" \
+            ubuntu@$ip:"/tmp/benchmark_final_summary/*" \
             "$RESULTS_COLLECTION_DIR/$instance_type/" 2>/dev/null; then
-            log "Lightweight results collected from $instance_type"
+            log "Final summary and plots collected from $instance_type"
         else
             warn "Failed to collect summary from $instance_type"
         fi
         
         # Clean up remote temporary directory
         ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
-            "rm -rf /tmp/benchmark_summary" 2>/dev/null || true
+            "rm -rf /tmp/benchmark_final_summary" 2>/dev/null || true
     }
     
     # Collect results from all instances
@@ -405,413 +612,60 @@ REMOTE_SCRIPT
     collect_results "$C7I_2X_IP" "c7i_2xlarge"
     collect_results "$C7I_4X_IP" "c7i_4xlarge"
     
-    # Generate comparison report
-    log "Generating cross-instance comparison report..."
+    # Create a simple index of all collected results
+    log "Creating results index..."
     
-    cat > "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md" << 'EOF'
-# ZK-SNARK ECDSA Cross-Instance Benchmark Comparison
+    cat > "$RESULTS_COLLECTION_DIR/README.md" << 'EOF'
+# ZK-SNARK ECDSA Benchmark Results
 
-This report compares the performance of ZK-SNARK ECDSA implementations across different EC2 instance types.
+This directory contains comprehensive benchmark results from multiple EC2 instance types.
 
-## Instance Specifications
+## Instance Types Tested
 
 - **t4g.medium**: ARM Graviton2, 2 vCPUs, 4GB RAM
 - **c7g.xlarge**: ARM Graviton3, 4 vCPUs, 8GB RAM  
 - **c7i.2xlarge**: Intel, 8 vCPUs, 16GB RAM
 - **c7i.4xlarge**: Intel, 16 vCPUs, 32GB RAM
 
-## Performance Summary
+## Results Structure
+
+Each instance directory contains:
+- `performance_summary.md` - Detailed performance report
+- `performance_data.json` - Raw performance data in JSON format
+- `proving_times.png` - Proving times visualization
+- `verification_times.png` - Verification times visualization
+- `gas_consumption.png` - Gas consumption visualization
+
+## Instance Results
 
 EOF
     
-    # Add performance data for each instance type
+    # Add links to each instance's results
     for instance_type in t4g_medium c7g_xlarge c7i_2xlarge c7i_4xlarge; do
-        # Check both the expected location and debug what's actually there
-        SUMMARY_FILE="$RESULTS_COLLECTION_DIR/$instance_type/summary.json"
-        
-        if [ -f "$SUMMARY_FILE" ]; then
-            echo "### $instance_type" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+        if [ -d "$RESULTS_COLLECTION_DIR/$instance_type" ]; then
+            echo "### [$instance_type](./$instance_type/)" >> "$RESULTS_COLLECTION_DIR/README.md"
+            echo "" >> "$RESULTS_COLLECTION_DIR/README.md"
             
-            cpu_cores=$(jq -r '.cpu_cores' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
-            memory_gb=$(jq -r '.memory_gb' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
-            total_duration=$(jq -r '.total_duration_seconds' "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
-            completed_suites=$(jq -r '.suites_completed[]?' "$SUMMARY_FILE" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-            skipped_suites=$(jq -r '.suites_skipped[]?' "$SUMMARY_FILE" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+            if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/performance_summary.md" ]; then
+                echo "- [Performance Summary](./$instance_type/performance_summary.md)" >> "$RESULTS_COLLECTION_DIR/README.md"
+            fi
             
-            echo "- **CPU Cores**: $cpu_cores" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "- **Memory**: ${memory_gb}GB" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "- **Total Duration**: ${total_duration}s" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            [ -n "$completed_suites" ] && echo "- **Completed Suites**: $completed_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            [ -n "$skipped_suites" ] && echo "- **Skipped Suites**: $skipped_suites" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/performance_data.json" ]; then
+                echo "- [Raw Data](./$instance_type/performance_data.json)" >> "$RESULTS_COLLECTION_DIR/README.md"
+            fi
             
-            # Add proving times and gas consumption for each suite
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "#### 🚀 Proving Performance" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            
-            for suite in snarkjs rapidsnark noir gnark; do
-                if [ -d "$RESULTS_COLLECTION_DIR/$instance_type/$suite" ]; then
-                    # Look for proving time data in benchmark files
-                    proving_time=""
-                    gas_cost=""
-                    
-                    # Search for aggregate statistics in any summary files
-                    if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*summary* ]; then
-                        proving_time=$(grep -o "Average Time: [0-9.]\+" "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*summary* 2>/dev/null | head -1 | grep -o "[0-9.]\+")
-                    fi
-                    
-                    # Search for gas data in JSON files
-                    for gas_file in "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/*.json "$RESULTS_COLLECTION_DIR/$instance_type/$suite"/gas-reports/*.json; do
-                        if [ -f "$gas_file" ]; then
-                            gas_cost=$(jq -r '.verification_gas // .gas_used // .gasUsed // .gas // empty' "$gas_file" 2>/dev/null | head -1)
-                            [ -n "$gas_cost" ] && break
-                        fi
-                    done
-                    
-                    if [ -n "$proving_time" ] || [ -n "$gas_cost" ]; then
-                        echo "**$suite:**" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-                        [ -n "$proving_time" ] && echo "- Proving Time: ${proving_time}s" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-                        [ -n "$gas_cost" ] && echo "- Gas Cost: $gas_cost" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-                        echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-                    fi
+            # List available plots
+            for plot in proving_times.png verification_times.png gas_consumption.png; do
+                if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/$plot" ]; then
+                    echo "- [$(echo $plot | sed 's/_/ /g' | sed 's/.png//')](./$instance_type/$plot)" >> "$RESULTS_COLLECTION_DIR/README.md"
                 fi
             done
             
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-        else
-            # Debug: show what's actually in the directory
-            echo "### $instance_type" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            echo "⚠️ **Summary file not found at**: \`$SUMMARY_FILE\`" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            
-            if [ -d "$RESULTS_COLLECTION_DIR/$instance_type" ]; then
-                echo "**Available files:**" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-                ls -la "$RESULTS_COLLECTION_DIR/$instance_type/" | sed 's/^/- /' >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            else
-                echo "**Directory not found**: \`$RESULTS_COLLECTION_DIR/$instance_type\`" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-            fi
-            echo "" >> "$RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+            echo "" >> "$RESULTS_COLLECTION_DIR/README.md"
         fi
     done
     
-    log "Cross-instance comparison saved to: $RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
-    log "All results collected in: $RESULTS_COLLECTION_DIR"
-    
-    # Generate performance plots (optional - won't break if it fails)
-    log "Attempting to generate performance plots..."
-    generate_plots() {
-        # Check if Python and required libraries are available
-        if ! command -v python3 &> /dev/null; then
-            warn "Python3 not found - skipping plot generation"
-            return 1
-        fi
-        
-        # Create a Python script for plotting
-        cat > "$RESULTS_COLLECTION_DIR/generate_plots.py" << 'PLOT_SCRIPT'
-#!/usr/bin/env python3
-import json
-import os
-import sys
-from pathlib import Path
-
-try:
-    import matplotlib.pyplot as plt
-    import numpy as np
-except ImportError:
-    print("matplotlib not available - skipping plots")
-    sys.exit(1)
-
-# Set up matplotlib for headless operation
-plt.switch_backend('Agg')
-
-def extract_proving_times(results_dir):
-    """Extract proving times from benchmark results."""
-    proving_times = {}
-    
-    for instance_dir in Path(results_dir).iterdir():
-        if not instance_dir.is_dir():
-            continue
-            
-        instance_name = instance_dir.name
-        proving_times[instance_name] = {}
-        
-        # Look for benchmark files in each suite
-        for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
-            suite_dir = instance_dir / suite
-            if suite_dir.exists():
-                times = []
-                
-                # Look for benchmark JSON files with proving times
-                for benchmark_file in suite_dir.glob('*benchmark*.json'):
-                    try:
-                        with open(benchmark_file) as f:
-                            data = json.load(f)
-                            
-                            # Handle different JSON structures
-                            if 'results' in data:
-                                for result in data['results']:
-                                    if 'times' in result:
-                                        times.extend(result['times'])
-                                    elif 'time' in result:
-                                        times.append(result['time'])
-                                    elif 'elapsed' in result:
-                                        times.append(result['elapsed'])
-                            elif 'benchmarks' in data:
-                                for bench in data['benchmarks']:
-                                    if 'time' in bench:
-                                        times.append(bench['time'])
-                            elif 'command' in data and 'time' in data:
-                                times.append(data['time'])
-                            elif isinstance(data, list):
-                                for item in data:
-                                    if isinstance(item, dict) and 'time' in item:
-                                        times.append(item['time'])
-                            
-                    except Exception as e:
-                        print(f"Error reading {benchmark_file}: {e}")
-                
-                # Look for aggregate statistics in summary files
-                for summary_file in suite_dir.glob('*summary*'):
-                    try:
-                        with open(summary_file) as f:
-                            content = f.read()
-                            # Look for aggregate statistics like "Average Time: 4.126 ± 0.015 seconds"
-                            import re
-                            avg_match = re.search(r'Average Time:\s*([0-9.]+)', content)
-                            if avg_match:
-                                avg_time = float(avg_match.group(1))
-                                proving_times[instance_name][suite] = {
-                                    'mean': avg_time,
-                                    'median': avg_time,  # Use average as approximation
-                                    'times': [avg_time]  # Single value for aggregate
-                                }
-                                print(f"Found aggregate stats for {suite}: {avg_time}s average")
-                                break
-                    except Exception as e:
-                        print(f"Error reading summary {summary_file}: {e}")
-                
-                # If we found individual times, calculate statistics
-                if times and suite not in proving_times[instance_name]:
-                    proving_times[instance_name][suite] = {
-                        'mean': np.mean(times),
-                        'median': np.median(times),
-                        'times': times
-                    }
-                    print(f"Calculated stats for {suite}: {len(times)} measurements, avg {np.mean(times):.3f}s")
-    
-    return proving_times
-
-def extract_gas_consumption(results_dir):
-    """Extract gas consumption from gas reports."""
-    gas_data = {}
-    
-    for instance_dir in Path(results_dir).iterdir():
-        if not instance_dir.is_dir():
-            continue
-            
-        instance_name = instance_dir.name
-        gas_data[instance_name] = {}
-        
-        # Look for gas reports in each suite
-        for suite in ['snarkjs', 'rapidsnark', 'noir', 'gnark']:
-            suite_dir = instance_dir / suite
-            if not suite_dir.exists():
-                continue
-                
-            # Look in multiple possible locations for gas data
-            gas_locations = [
-                suite_dir / 'gas-reports',
-                suite_dir / 'gas',
-                suite_dir / 'benchmarks',
-                suite_dir
-            ]
-            
-            for gas_dir in gas_locations:
-                if gas_dir.exists():
-                    # Look for JSON files with gas data
-                    for report_file in gas_dir.rglob('*.json'):
-                        try:
-                            with open(report_file) as f:
-                                data = json.load(f)
-                                
-                                # Extract gas usage data from various formats
-                                gas_value = None
-                                
-                                if 'verification_gas' in data:
-                                    gas_value = data['verification_gas']
-                                elif 'gas_used' in data:
-                                    gas_value = data['gas_used']
-                                elif 'gasUsed' in data:
-                                    gas_value = data['gasUsed']
-                                elif 'gas' in data:
-                                    gas_value = data['gas']
-                                elif isinstance(data, dict):
-                                    # Look for gas usage in nested structures
-                                    for key, value in data.items():
-                                        if isinstance(value, dict):
-                                            if 'gasUsed' in value:
-                                                gas_value = value['gasUsed']
-                                                break
-                                            elif 'gas' in value:
-                                                gas_value = value['gas']
-                                                break
-                                    
-                                    # Look for Foundry-style gas reports
-                                    if 'test' in str(data).lower() and 'gas' in str(data).lower():
-                                        for test_key, test_data in data.items():
-                                            if isinstance(test_data, dict) and 'gas' in test_data:
-                                                gas_value = test_data['gas']
-                                                break
-                                
-                                if gas_value is not None:
-                                    gas_data[instance_name][suite] = gas_value
-                                    print(f"Found gas data for {suite}: {gas_value}")
-                                    break
-                                    
-                        except Exception as e:
-                            print(f"Error reading gas report {report_file}: {e}")
-                    
-                    if suite in gas_data[instance_name]:
-                        break  # Found gas data for this suite, move to next
-    
-    return gas_data
-
-def plot_proving_times(proving_times, output_dir):
-    """Generate proving time comparison plots."""
-    if not proving_times:
-        print("No proving time data found")
-        return
-    
-    # Collect data for plotting
-    instances = list(proving_times.keys())
-    suites = set()
-    for instance_data in proving_times.values():
-        suites.update(instance_data.keys())
-    suites = sorted(list(suites))
-    
-    if not suites:
-        print("No suite data found for proving times")
-        return
-    
-    # Create bar plot
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    x = np.arange(len(instances))
-    width = 0.8 / len(suites)
-    
-    for i, suite in enumerate(suites):
-        times = []
-        for instance in instances:
-            if suite in proving_times[instance]:
-                times.append(proving_times[instance][suite]['mean'])
-            else:
-                times.append(0)
-        
-        ax.bar(x + i * width, times, width, label=suite, alpha=0.8)
-    
-    ax.set_xlabel('Instance Type')
-    ax.set_ylabel('Proving Time (seconds)')
-    ax.set_title('ZK-SNARK Proving Time Comparison Across Instances')
-    ax.set_xticks(x + width * (len(suites) - 1) / 2)
-    ax.set_xticklabels(instances, rotation=45)
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(output_dir / 'proving_times_comparison.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Proving times plot saved to {output_dir / 'proving_times_comparison.png'}")
-
-def plot_gas_consumption(gas_data, output_dir):
-    """Generate gas consumption comparison plots."""
-    if not gas_data:
-        print("No gas consumption data found")
-        return
-    
-    # Collect data for plotting
-    instances = list(gas_data.keys())
-    suites = set()
-    for instance_data in gas_data.values():
-        suites.update(instance_data.keys())
-    suites = sorted(list(suites))
-    
-    if not suites:
-        print("No suite data found for gas consumption")
-        return
-    
-    # Create bar plot
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    x = np.arange(len(instances))
-    width = 0.8 / len(suites)
-    
-    for i, suite in enumerate(suites):
-        gas_values = []
-        for instance in instances:
-            if suite in gas_data[instance]:
-                gas_values.append(gas_data[instance][suite])
-            else:
-                gas_values.append(0)
-        
-        ax.bar(x + i * width, gas_values, width, label=suite, alpha=0.8)
-    
-    ax.set_xlabel('Instance Type')
-    ax.set_ylabel('Gas Consumption')
-    ax.set_title('ZK-SNARK Verification Gas Consumption Across Instances')
-    ax.set_xticks(x + width * (len(suites) - 1) / 2)
-    ax.set_xticklabels(instances, rotation=45)
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # Format y-axis for large numbers
-    ax.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
-    
-    plt.tight_layout()
-    plt.savefig(output_dir / 'gas_consumption_comparison.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Gas consumption plot saved to {output_dir / 'gas_consumption_comparison.png'}")
-
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python3 generate_plots.py <results_directory>")
-        sys.exit(1)
-    
-    results_dir = Path(sys.argv[1])
-    
-    print("Extracting proving times...")
-    proving_times = extract_proving_times(results_dir)
-    
-    print("Extracting gas consumption data...")
-    gas_data = extract_gas_consumption(results_dir)
-    
-    print("Generating plots...")
-    plot_proving_times(proving_times, results_dir)
-    plot_gas_consumption(gas_data, results_dir)
-    
-    print("Plot generation completed!")
-
-if __name__ == "__main__":
-    main()
-PLOT_SCRIPT
-        
-        # Run the plotting script
-        if python3 "$RESULTS_COLLECTION_DIR/generate_plots.py" "$RESULTS_COLLECTION_DIR" 2>/dev/null; then
-            log "Performance plots generated successfully!"
-            log "  - Proving times: $RESULTS_COLLECTION_DIR/proving_times_comparison.png"
-            log "  - Gas consumption: $RESULTS_COLLECTION_DIR/gas_consumption_comparison.png"
-        else
-            warn "Plot generation failed - continuing without plots"
-        fi
-        
-        # Clean up the script
-        rm -f "$RESULTS_COLLECTION_DIR/generate_plots.py"
-    }
-    
-    # Try to generate plots (non-blocking)
-    generate_plots || warn "Plot generation skipped"
+    echo "Generated at: $(date)" >> "$RESULTS_COLLECTION_DIR/README.md"
     
 else
     log "Skipping benchmark execution"
@@ -836,7 +690,14 @@ log "=== Deployment Complete ==="
 if [ "$SKIP_BENCHMARKS" = false ]; then
     echo
     log "Benchmark results are available in: $RESULTS_COLLECTION_DIR"
-    log "View the cross-instance comparison at: $RESULTS_COLLECTION_DIR/cross_instance_comparison.md"
+    log "View the results index at: $RESULTS_COLLECTION_DIR/README.md"
+    log ""
+    log "Each instance directory contains:"
+    log "  - performance_summary.md (detailed report)"
+    log "  - performance_data.json (raw data)"
+    log "  - proving_times.png (performance plots)"
+    log "  - verification_times.png (performance plots)"
+    log "  - gas_consumption.png (performance plots)"
 fi
 
 if [ "$CLEANUP" = false ] && [ "$SKIP_DEPLOY" = false ]; then
