@@ -120,7 +120,7 @@ def generate_plots(json_file_path):
         
         # Add std dev as text annotation
         std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
-        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+        plt.text(0.02, 0.70, std_text, transform=plt.gca().transAxes, 
                  verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
                  fontsize=9)
         
@@ -202,7 +202,7 @@ def generate_plots(json_file_path):
         
         # Add std dev as text annotation
         std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
-        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+        plt.text(0.02, 0.70, std_text, transform=plt.gca().transAxes, 
                  verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
                  fontsize=9)
         
