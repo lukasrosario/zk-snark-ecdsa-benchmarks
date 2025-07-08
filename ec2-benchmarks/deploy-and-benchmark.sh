@@ -36,9 +36,7 @@ check_dependencies() {
         missing_deps+=("jq")
     fi
 
-    if ! command -v pip3 &> /dev/null; then
-        missing_deps+=("pip3")
-    fi
+
     
     if [ ${#missing_deps[@]} -ne 0 ]; then
         error "Missing required dependencies: ${missing_deps[*]}"
@@ -46,8 +44,6 @@ check_dependencies() {
         exit 1
     fi
 
-    log "Checking Python dependencies..."
-    pip3 install --user -r "$SCRIPT_DIR/requirements.txt"
 }
 
 # Display usage information
@@ -66,6 +62,7 @@ OPTIONS:
     --skip-deploy           Skip infrastructure deployment (use existing instances)
     --skip-benchmarks       Skip benchmark execution (deploy only)
     --cleanup               Destroy infrastructure after benchmarks complete
+    --skip-reports          Skip report generation (just collect raw data)
     -h, --help              Show this help message
 
 EXAMPLES:
@@ -81,6 +78,9 @@ EXAMPLES:
     # Run benchmarks on existing instances
     $0 --skip-deploy
     
+    # Run benchmarks without generating reports
+    $0 -k my-key -s subnet-123456 -v vpc-123456 --skip-reports
+    
     # Full cycle with cleanup
     $0 -k my-key -s subnet-123456 -v vpc-123456 --cleanup
 
@@ -92,6 +92,7 @@ AWS_REGION="us-east-1"
 TEST_CASES=10
 SKIP_DEPLOY=false
 SKIP_BENCHMARKS=false
+SKIP_REPORTS=false
 CLEANUP=false
 KEY_NAME=""
 SUBNET_ID=""
@@ -126,6 +127,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-benchmarks)
             SKIP_BENCHMARKS=true
+            shift
+            ;;
+        --skip-reports)
+            SKIP_REPORTS=true
             shift
             ;;
         --cleanup)
@@ -414,10 +419,31 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
             # --- End JSON generation ---
 REMOTE_SCRIPT
         
-        # Copy the generated summary files
+        # Generate reports on the VM if not skipping reports
+        if [ "$SKIP_REPORTS" = false ]; then
+            log "Generating reports on $instance_type..."
+            
+            # Copy the generate_reports.py script to the VM and run it
+            scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no \
+                "$SCRIPT_DIR/generate_reports.py" \
+                ubuntu@$ip:/tmp/
+            
+            # Run the report generation on the VM
+            ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
+                "cd /tmp && python3 generate_reports.py benchmark_final_summary/performance_data.json"
+        fi
+        
+        # Copy the generated summary files and reports
         scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
             ubuntu@$ip:"/tmp/benchmark_final_summary/*" \
             "$RESULTS_COLLECTION_DIR/$instance_type/"
+        
+        # Copy any generated PNG files if reports were created
+        if [ "$SKIP_REPORTS" = false ]; then
+            scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no \
+                ubuntu@$ip:"/tmp/*.png" \
+                "$RESULTS_COLLECTION_DIR/$instance_type/" 2>/dev/null || true
+        fi
         
         log "Results and summary collected from $instance_type"
     }
@@ -427,15 +453,6 @@ REMOTE_SCRIPT
         instance_type=$(echo "$instance_info" | jq -r '.key')
         ip=$(echo "$instance_info" | jq -r '.value.public_ip')
         collect_results "$ip" "$instance_type"
-    done
-    
-    # Generate plots and summaries for each instance type
-    log "Generating reports for all collected results..."
-    for dir in "$RESULTS_COLLECTION_DIR"/*/; do
-        if [ -f "${dir}performance_data.json" ]; then
-            log "Processing results in $dir"
-            python3 "$SCRIPT_DIR/generate_reports.py" "${dir}performance_data.json"
-        fi
     done
     
     log "All results collected and processed!"
@@ -461,14 +478,23 @@ log "=== Deployment Complete ==="
 if [ "$SKIP_BENCHMARKS" = false ]; then
     echo
     log "Benchmark results are available in: $RESULTS_COLLECTION_DIR"
-    log "View the results index at: $RESULTS_COLLECTION_DIR/README.md"
-    log ""
-    log "Each instance directory contains:"
-    log "  - performance_summary.md (detailed report)"
-    log "  - performance_data.json (raw data)"
-    log "  - proving_times.png (performance plots)"
-    log "  - verification_times.png (performance plots)"
-    log "  - gas_consumption.png (performance plots)"
+    
+    if [ "$SKIP_REPORTS" = false ]; then
+        log ""
+        log "Each instance directory contains:"
+        log "  - performance_summary.md (detailed report)"
+        log "  - performance_data.json (raw data)"
+        log "  - proving_times.png (performance plots)"
+        log "  - verification_times.png (performance plots)"
+        log "  - gas_consumption.png (performance plots)"
+    else
+        log ""
+        log "Raw data collected. Each instance directory contains:"
+        log "  - performance_data.json (raw benchmark data)"
+        log ""
+        log "To generate reports later, you can run on any VM or locally:"
+        log "  python3 $SCRIPT_DIR/generate_reports.py <path_to_performance_data.json>"
+    fi
 fi
 
 if [ "$CLEANUP" = false ] && [ "$SKIP_DEPLOY" = false ]; then
