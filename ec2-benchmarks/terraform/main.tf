@@ -64,7 +64,7 @@ resource "aws_security_group" "benchmark_sg" {
 
 # EBS volumes for persistent storage
 resource "aws_ebs_volume" "benchmark_volumes" {
-  count             = 4
+  count             = 5
   availability_zone = data.aws_subnet.selected.availability_zone
   size              = 50
   type              = "gp3"
@@ -171,10 +171,10 @@ resource "aws_instance" "c7g_xlarge" {
   }
 }
 
-# c7i.2xlarge - Intel, 8 vCPUs, 16GB RAM
-resource "aws_instance" "c7i_2xlarge" {
+# c7i.8xlarge - Intel, 32 vCPUs, 64GB RAM
+resource "aws_instance" "c7i_8xlarge" {
   ami                     = data.aws_ami.ubuntu.id
-  instance_type          = "c7i.2xlarge"
+  instance_type          = "c7i.8xlarge"
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.benchmark_sg.id]
@@ -188,9 +188,9 @@ resource "aws_instance" "c7i_2xlarge" {
   }
 
   tags = {
-    Name = "zk-benchmark-c7i-2xlarge"
+    Name = "zk-benchmark-c7i-8xlarge"
     Type = "benchmark"
-    InstanceType = "c7i.2xlarge"
+    InstanceType = "c7i.8xlarge"
   }
 }
 
@@ -217,16 +217,40 @@ resource "aws_instance" "c7i_4xlarge" {
   }
 }
 
+# c7i.2xlarge - Intel, 8 vCPUs, 16GB RAM
+resource "aws_instance" "c7i_2xlarge" {
+  ami                     = data.aws_ami.ubuntu.id
+  instance_type          = "c7i.2xlarge"
+  key_name               = var.key_name
+  subnet_id              = var.subnet_id
+  vpc_security_group_ids = [aws_security_group.benchmark_sg.id]
+  associate_public_ip_address = true
+  user_data              = local.user_data
+
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 30
+    encrypted   = true
+  }
+
+  tags = {
+    Name = "zk-benchmark-c7i-2xlarge"
+    Type = "benchmark"
+    InstanceType = "c7i.2xlarge"
+  }
+}
+
 # Attach volumes to instances
 resource "aws_volume_attachment" "benchmark_attachments" {
-  count       = 4
+  count       = 5
   device_name = "/dev/sdf"
   volume_id   = aws_ebs_volume.benchmark_volumes[count.index].id
   instance_id = [
     aws_instance.t4g_medium.id,
     aws_instance.c7g_xlarge.id,
-    aws_instance.c7i_2xlarge.id,
-    aws_instance.c7i_4xlarge.id
+    aws_instance.c7i_8xlarge.id,
+    aws_instance.c7i_4xlarge.id,
+    aws_instance.c7i_2xlarge.id
   ][count.index]
 }
 
@@ -243,15 +267,20 @@ output "instance_info" {
       public_ip  = aws_instance.c7g_xlarge.public_ip
       private_ip = aws_instance.c7g_xlarge.private_ip
     }
-    c7i_2xlarge = {
-      id         = aws_instance.c7i_2xlarge.id
-      public_ip  = aws_instance.c7i_2xlarge.public_ip
-      private_ip = aws_instance.c7i_2xlarge.private_ip
+    c7i_8xlarge = {
+      id         = aws_instance.c7i_8xlarge.id
+      public_ip  = aws_instance.c7i_8xlarge.public_ip
+      private_ip = aws_instance.c7i_8xlarge.private_ip
     }
     c7i_4xlarge = {
       id         = aws_instance.c7i_4xlarge.id
       public_ip  = aws_instance.c7i_4xlarge.public_ip
       private_ip = aws_instance.c7i_4xlarge.private_ip
+    }
+    c7i_2xlarge = {
+      id         = aws_instance.c7i_2xlarge.id
+      public_ip  = aws_instance.c7i_2xlarge.public_ip
+      private_ip = aws_instance.c7i_2xlarge.private_ip
     }
   }
 }

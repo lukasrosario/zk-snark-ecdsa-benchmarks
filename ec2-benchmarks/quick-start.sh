@@ -33,9 +33,10 @@ echo
 echo "This script will help you set up and run ZK-SNARK ECDSA benchmarks on EC2."
 echo "The benchmarks will run on four instance types:"
 echo "  • t4g.medium (ARM Graviton2, 2 vCPUs, 4GB RAM)"
-echo "  • c7g.xlarge (ARM Graviton3, 4 vCPUs, 8GB RAM)"  
+echo "  • c7g.xlarge (ARM Graviton3, 4 vCPUs, 8GB RAM)"
 echo "  • c7i.2xlarge (Intel, 8 vCPUs, 16GB RAM)"
 echo "  • c7i.4xlarge (Intel, 16 vCPUs, 32GB RAM)"
+echo "  • c7i.8xlarge (Intel, 32 vCPUs, 64GB RAM)"
 echo
 
 # Step 1: Setup check
@@ -220,7 +221,7 @@ if [ -n "$RESULTS_DIR" ]; then
     echo
     echo "Key files:"
     echo "  • Cross-instance comparison: $RESULTS_DIR/cross_instance_comparison.md"
-    echo "  • Individual results: $RESULTS_DIR/{t4g_medium,c7g_xlarge,c7i_2xlarge,c7i_4xlarge}/"
+    echo "  • Individual results: $RESULTS_DIR/{t4g_medium,c7g_xlarge,c7i_8xlarge,c7i_4xlarge,c7i_2xlarge}/"
     
     if command -v open &> /dev/null; then
         read -p "Open results directory? [Y/n]: " OPEN_RESULTS
