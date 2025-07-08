@@ -59,9 +59,15 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 retry apt-get update -y
 retry apt-get install -y --fix-missing nodejs
 
-# Install Python packages for plotting
+# Install Google Chrome (required by kaleido for image generation)
+wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 retry apt-get update -y
-retry apt-get install -y --fix-missing python3-pip python3-matplotlib python3-numpy
+retry apt-get install -y --fix-missing google-chrome-stable
+
+# Install Python packages for plotting
+retry apt-get install -y --fix-missing python3-pip
+pip3 install numpy plotly kaleido
 
 # Configure Docker for performance - increase memory and use all CPU cores
 cat > /etc/docker/daemon.json << EOF
