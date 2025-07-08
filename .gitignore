@@ -69,3 +69,6 @@ pot22_final.ptau
 *.tfstate
 *.tfstate.backup
 *.lock.hcl
+
+# GMP archive for rapidsnark build
+gmp-6.2.1.tar.xz

@@ -174,6 +174,31 @@ log "Test cases to generate: $TEST_CASES"
 # Check dependencies
 check_dependencies
 
+# Ensure GMP archive is available for rapidsnark build
+if [ "$SKIP_BENCHMARKS" = false ]; then
+    log "Checking GMP archive for rapidsnark build..."
+    if [ ! -f "$PROJECT_ROOT/rapidsnark/gmp-6.2.1.tar.xz" ]; then
+        log "GMP archive not found. Downloading..."
+        if [ -f "$PROJECT_ROOT/rapidsnark/download_gmp.sh" ]; then
+            cd "$PROJECT_ROOT/rapidsnark"
+            ./download_gmp.sh
+            cd "$SCRIPT_DIR"
+        else
+            warn "download_gmp.sh not found. Attempting direct download..."
+            curl -L -o "$PROJECT_ROOT/rapidsnark/gmp-6.2.1.tar.xz" "https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz"
+        fi
+        
+        if [ -f "$PROJECT_ROOT/rapidsnark/gmp-6.2.1.tar.xz" ]; then
+            log "✓ GMP archive downloaded successfully"
+        else
+            error "Failed to download GMP archive. Rapidsnark builds will fail."
+            exit 1
+        fi
+    else
+        log "✓ GMP archive found"
+    fi
+fi
+
 # Move to terraform directory
 cd "$SCRIPT_DIR/terraform"
 
@@ -295,6 +320,17 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
         scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no \
             "$SCRIPT_DIR/scripts/run-all-benchmarks.sh" \
             ubuntu@$ip:/home/ubuntu/
+        
+        # Copy GMP archive for rapidsnark build (if it exists)
+        if [ -f "$PROJECT_ROOT/rapidsnark/gmp-6.2.1.tar.xz" ]; then
+            log "Copying GMP archive to $instance_type..."
+            scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no \
+                "$PROJECT_ROOT/rapidsnark/gmp-6.2.1.tar.xz" \
+                ubuntu@$ip:/home/ubuntu/zk-snark-ecdsa-benchmarks/rapidsnark/
+        else
+            warn "GMP archive not found locally. Rapidsnark build may fail on $instance_type."
+            warn "Run 'cd $PROJECT_ROOT/rapidsnark && ./download_gmp.sh' to download it."
+        fi
         
         # Make it executable and run
         ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
