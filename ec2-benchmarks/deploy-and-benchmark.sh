@@ -35,12 +35,19 @@ check_dependencies() {
     if ! command -v jq &> /dev/null; then
         missing_deps+=("jq")
     fi
+
+    if ! command -v pip3 &> /dev/null; then
+        missing_deps+=("pip3")
+    fi
     
     if [ ${#missing_deps[@]} -ne 0 ]; then
         error "Missing required dependencies: ${missing_deps[*]}"
         echo "Please install the missing dependencies and try again."
         exit 1
     fi
+
+    log "Checking Python dependencies..."
+    pip3 install -r "$SCRIPT_DIR/requirements.txt"
 }
 
 # Display usage information
@@ -335,22 +342,24 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
             
             # --- Proving Times ---
             echo "  \"proving_times\": {" >> "$SUMMARY_DIR/performance_data.json"
-            first_suite=true
+            temp_entries_proving=$(mktemp)
             for suite in snarkjs rapidsnark noir gnark; do
                 if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
                     avg_time=$(jq -r '[.results[].mean] | add / length' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null)
                     if [ -n "$avg_time" ] && [ "$avg_time" != "null" ]; then
-                        if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
-                        echo "    \"$suite\": $avg_time" >> "$SUMMARY_DIR/performance_data.json"
-                        first_suite=false
+                        echo "    \"$suite\": $avg_time" >> "$temp_entries_proving"
                     fi
                 fi
             done
+            if [ -s "$temp_entries_proving" ]; then
+                sed '$!s/$/,/' "$temp_entries_proving" >> "$SUMMARY_DIR/performance_data.json"
+            fi
+            rm "$temp_entries_proving"
             echo "  }," >> "$SUMMARY_DIR/performance_data.json"
 
             # --- Gas Costs ---
             echo "  \"gas_costs\": {" >> "$SUMMARY_DIR/performance_data.json"
-            first_suite=true
+            temp_entries_gas=$(mktemp)
             for suite in snarkjs rapidsnark noir gnark; do
                  gas_file_snarkjs_rapidsnark="$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json"
                  gas_file_noir="$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json"
@@ -361,24 +370,25 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                     avg_gas=$(jq -r '[.results[].gas_used] | add / length' "$gas_file_noir" 2>/dev/null)
                  fi
                  if [ -n "$avg_gas" ] && [ "$avg_gas" != "null" ]; then
-                    if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
-                    echo "    \"$suite\": $avg_gas" >> "$SUMMARY_DIR/performance_data.json"
-                    first_suite=false
+                    echo "    \"$suite\": $avg_gas" >> "$temp_entries_gas"
                  fi
             done
+            if [ -s "$temp_entries_gas" ]; then
+                sed '$!s/$/,/' "$temp_entries_gas" >> "$SUMMARY_DIR/performance_data.json"
+            fi
+            rm "$temp_entries_gas"
             echo "  }," >> "$SUMMARY_DIR/performance_data.json"
 
             # --- Raw Data ---
             echo "  \"raw_data\": {" >> "$SUMMARY_DIR/performance_data.json"
-            first_suite=true
+            temp_raw_entries=$(mktemp)
             for suite in snarkjs rapidsnark noir gnark; do
                 if [ -d "$LATEST_RESULTS/$suite" ]; then
-                    if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
-                    echo "    \"$suite\": {" >> "$SUMMARY_DIR/performance_data.json"
+                    echo "    \"$suite\": {" >> "$temp_raw_entries"
                     
                     # Raw proving times
                     proving_times_raw=$(jq -r '[.results[].mean] | map(select(. != null)) | join(",")' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null || echo "")
-                    echo "      \"proving_times\": [$proving_times_raw]" >> "$SUMMARY_DIR/performance_data.json"
+                    echo "      \"proving_times\": [$proving_times_raw]," >> "$temp_raw_entries"
 
                     # Raw gas costs
                     gas_file_snarkjs_rapidsnark="$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json"
@@ -389,12 +399,15 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
                     elif [ -f "$gas_file_noir" ]; then
                         gas_costs_raw=$(jq -r '[.results[].gas_used] | map(select(. != null)) | join(",")' "$gas_file_noir" 2>/dev/null || echo "")
                     fi
-                    echo "      ,\"gas_costs\": [$gas_costs_raw]" >> "$SUMMARY_DIR/performance_data.json"
+                    echo "      \"gas_costs\": [$gas_costs_raw]" >> "$temp_raw_entries"
 
-                    echo "    }" >> "$SUMMARY_DIR/performance_data.json"
-                    first_suite=false
+                    echo "    }" >> "$temp_raw_entries"
                 fi
             done
+            if [ -s "$temp_raw_entries" ]; then
+                sed '$!s/^\(    }\)$/\1,/' "$temp_raw_entries" >> "$SUMMARY_DIR/performance_data.json"
+            fi
+            rm "$temp_raw_entries"
             echo "  }" >> "$SUMMARY_DIR/performance_data.json"
             
             echo "}" >> "$SUMMARY_DIR/performance_data.json"
