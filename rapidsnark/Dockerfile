@@ -94,9 +94,21 @@ RUN cd rapidsnark && \
     git submodule update && \
     # Clean any existing build artifacts
     rm -rf build_prover && \
-    # Build GMP first
+    # Build GMP with retry logic and HTTP mirror fallback
     chmod +x build_gmp.sh && \
-    ./build_gmp.sh host_noasm && \
+    for i in {1..3}; do \
+        if ./build_gmp.sh host_noasm; then \
+            echo "GMP build succeeded on attempt $i"; \
+            break; \
+        elif [ $i -eq 3 ]; then \
+            echo "GMP build failed after 3 attempts, trying HTTP mirror..."; \
+            sed -i 's|ftp://ftp.gnu.org/gnu/gmp|https://ftp.gnu.org/gnu/gmp|g' build_gmp.sh && \
+            ./build_gmp.sh host_noasm; \
+        else \
+            echo "GMP build attempt $i failed, retrying in 10 seconds..."; \
+            sleep 10; \
+        fi; \
+    done && \
     # Build rapidsnark
     make host_noasm && \
     ls && \
