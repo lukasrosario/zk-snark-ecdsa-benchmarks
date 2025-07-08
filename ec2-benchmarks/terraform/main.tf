@@ -267,20 +267,20 @@ output "instance_info" {
       public_ip  = aws_instance.c7g_xlarge.public_ip
       private_ip = aws_instance.c7g_xlarge.private_ip
     }
-    c7i_8xlarge = {
-      id         = aws_instance.c7i_8xlarge.id
-      public_ip  = aws_instance.c7i_8xlarge.public_ip
-      private_ip = aws_instance.c7i_8xlarge.private_ip
+    c7i_2xlarge = {
+      id         = aws_instance.c7i_2xlarge.id
+      public_ip  = aws_instance.c7i_2xlarge.public_ip
+      private_ip = aws_instance.c7i_2xlarge.private_ip
     }
     c7i_4xlarge = {
       id         = aws_instance.c7i_4xlarge.id
       public_ip  = aws_instance.c7i_4xlarge.public_ip
       private_ip = aws_instance.c7i_4xlarge.private_ip
     }
-    c7i_2xlarge = {
-      id         = aws_instance.c7i_2xlarge.id
-      public_ip  = aws_instance.c7i_2xlarge.public_ip
-      private_ip = aws_instance.c7i_2xlarge.private_ip
+    c7i_8xlarge = {
+      id         = aws_instance.c7i_8xlarge.id
+      public_ip  = aws_instance.c7i_8xlarge.public_ip
+      private_ip = aws_instance.c7i_8xlarge.private_ip
     }
   }
 }
