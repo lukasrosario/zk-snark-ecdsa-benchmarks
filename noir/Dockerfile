@@ -1,17 +1,31 @@
 FROM ubuntu:24.04 AS builder
 
 # Install system dependencies for building
-RUN apt-get update && apt-get install -y \
-    git \
-    build-essential \
-    cmake \
-    libgmp-dev \
-    libsodium-dev \
-    curl \
-    wget \
-    jq \
-    vim-common \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            git \
+            build-essential \
+            cmake \
+            libgmp-dev \
+            libsodium-dev \
+            curl \
+            wget \
+            jq \
+            vim-common \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -47,15 +61,29 @@ RUN bbup
 FROM ubuntu:24.04
 
 # Install only the runtime dependencies
-RUN apt-get update && apt-get install -y \
-    libgmp-dev \
-    libsodium-dev \
-    git \
-    curl \
-    jq \
-    xxd \
-    bc \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            libgmp-dev \
+            libsodium-dev \
+            git \
+            curl \
+            jq \
+            xxd \
+            bc \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Copy necessary binaries and directories from builder
 COPY --from=builder /root/.cargo/bin/ /root/.cargo/bin/
