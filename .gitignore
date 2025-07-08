@@ -64,8 +64,7 @@ pot22_final.ptau
 *.key
 *.sol
 *.json
-*.txt
-!requirements.txt 
+*.txt 
 *.log
 *.tfstate
 *.tfstate.backup

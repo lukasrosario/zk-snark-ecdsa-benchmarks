@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
-import plotly.graph_objects as go
-import plotly.io as pio
+import matplotlib.pyplot as plt
 import numpy as np
 import sys
 from pathlib import Path
@@ -42,8 +41,8 @@ def generate_summary_markdown(data, output_dir):
 def generate_plots(json_file_path):
     """Generate performance plots from JSON data file."""
     
-    # Set up plotly for headless operation
-    pio.defaults.mathjax = None
+    # Set up matplotlib for headless operation
+    plt.switch_backend('Agg')
     
     # Load performance data
     try:
@@ -92,81 +91,52 @@ def generate_plots(json_file_path):
                 max_times.append(avg_times[len(max_times)])
                 std_devs.append(0)
         
-        # Create plotly figure
-        fig = go.Figure()
+        # Create grouped bar chart
+        x = np.arange(len(suites))
+        width = 0.25
         
-        # Add average markers (large dots)
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=avg_times,
-            mode="markers",
-            name="Average",
-            marker=dict(color="blue", size=16),
-            showlegend=True
-        ))
+        plt.figure(figsize=(12, 7))
         
-        # Add vertical lines connecting min to max
+        bars1 = plt.bar(x - width, min_times, width, label='Minimum', alpha=0.8, color='#2ca02c')
+        bars2 = plt.bar(x, avg_times, width, label='Average', alpha=0.8, color='#1f77b4')  
+        bars3 = plt.bar(x + width, max_times, width, label='Maximum', alpha=0.8, color='#d62728')
+        
+        plt.xlabel('ZK-SNARK Suite')
+        plt.ylabel('Proving Time (seconds)')
+        plt.title(f'ZK-SNARK Proving Times - {instance_type}')
+        plt.xticks(x, suites, rotation=45)
+        plt.grid(True, alpha=0.3)
+        
+        # Add std dev info to legend
+        legend_labels = []
         for i, suite in enumerate(suites):
-            if min_times[i] != max_times[i]:
-                fig.add_shape(
-                    dict(type="line",
-                         x0=suite,
-                         x1=suite,
-                         y0=min_times[i],
-                         y1=max_times[i],
-                         line=dict(color="blue", width=2))
-                )
+            if std_devs[i] > 0:
+                legend_labels.append(f'{suite}: σ={std_devs[i]:.3f}s')
+            else:
+                legend_labels.append(f'{suite}: single measurement')
         
-        # Add minimum and maximum markers with different colors
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=min_times,
-            mode="markers",
-            name="Minimum",
-            marker=dict(color="green", size=10),
-            showlegend=True
-        ))
+        # Create custom legend
+        plt.legend(title='Statistics')
         
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=max_times,
-            mode="markers",
-            name="Maximum",
-            marker=dict(color="red", size=10),
-            showlegend=True
-        ))
+        # Add std dev as text annotation
+        std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
+        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+                 fontsize=9)
         
-        # Add standard deviation information as text annotation
-        std_text = "Standard Deviations:<br>" + "<br>".join([
-            f"{suite}: σ={std_devs[i]:.3f}s" if std_devs[i] > 0 else f"{suite}: single measurement"
-            for i, suite in enumerate(suites)
-        ])
+        # Add value labels on bars
+        def add_value_labels(bars, values):
+            for bar, value in zip(bars, values):
+                plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(max_times)*0.01,
+                        f'{value:.3f}s', ha='center', va='bottom', fontsize=8, rotation=0)
         
-        fig.update_layout(
-            title=f"ZK-SNARK Proving Times - {instance_type}",
-            title_x=0.5,
-            xaxis_title="ZK-SNARK Suite",
-            yaxis_title="Proving Time (seconds)",
-            width=1000,  # Increased width to make room for text
-            height=500,
-            showlegend=True,
-            margin=dict(r=200),  # Add right margin for text
-            annotations=[
-                dict(
-                    text=std_text,
-                    xref="paper", yref="paper",
-                    x=1.02, y=0.8,  # Position outside plot area
-                    xanchor="left", yanchor="top",
-                    showarrow=False,
-                    font=dict(size=10),
-                    bgcolor="rgba(255,255,255,0.8)",
-                    bordercolor="black",
-                    borderwidth=1
-                )
-            ]
-        )
+        add_value_labels(bars1, min_times)
+        add_value_labels(bars2, avg_times)
+        add_value_labels(bars3, max_times)
         
-        fig.write_image(output_dir / 'proving_times.png')
+        plt.tight_layout()
+        plt.savefig(output_dir / 'proving_times.png', dpi=300, bbox_inches='tight')
+        plt.close()
         print("Generated proving_times.png")
     
     # Generate gas consumption plot with min, max, average
@@ -202,81 +172,53 @@ def generate_plots(json_file_path):
                 max_costs.append(avg_val)
                 std_devs.append(0)
 
-        # Create plotly figure
-        fig = go.Figure()
+        # Create grouped bar chart
+        x = np.arange(len(suites))
+        width = 0.25
         
-        # Add average markers (large dots)
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=avg_costs,
-            mode="markers",
-            name="Average",
-            marker=dict(color="blue", size=16),
-            showlegend=True
-        ))
+        plt.figure(figsize=(12, 7))
         
-        # Add vertical lines connecting min to max
+        bars1 = plt.bar(x - width, min_costs, width, label='Minimum', alpha=0.8, color='#2ca02c')
+        bars2 = plt.bar(x, avg_costs, width, label='Average', alpha=0.8, color='#1f77b4')  
+        bars3 = plt.bar(x + width, max_costs, width, label='Maximum', alpha=0.8, color='#d62728')
+        
+        plt.xlabel('ZK-SNARK Suite')
+        plt.ylabel('Gas Consumption')
+        plt.title(f'ZK-SNARK Gas Consumption - {instance_type}')
+        plt.xticks(x, suites, rotation=45)
+        plt.grid(True, alpha=0.3)
+        plt.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
+        
+        # Add std dev info to legend
+        legend_labels = []
         for i, suite in enumerate(suites):
-            if min_costs[i] != max_costs[i]:
-                fig.add_shape(
-                    dict(type="line",
-                         x0=suite,
-                         x1=suite,
-                         y0=min_costs[i],
-                         y1=max_costs[i],
-                         line=dict(color="blue", width=2))
-                )
+            if std_devs[i] > 0:
+                legend_labels.append(f'{suite}: σ={std_devs[i]:.2f}')
+            else:
+                legend_labels.append(f'{suite}: deterministic')
         
-        # Add minimum and maximum markers with different colors
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=min_costs,
-            mode="markers",
-            name="Minimum",
-            marker=dict(color="green", size=10),
-            showlegend=True
-        ))
+        # Create custom legend
+        plt.legend(title='Statistics')
         
-        fig.add_trace(go.Scatter(
-            x=suites,
-            y=max_costs,
-            mode="markers",
-            name="Maximum",
-            marker=dict(color="red", size=10),
-            showlegend=True
-        ))
+        # Add std dev as text annotation
+        std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
+        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+                 fontsize=9)
         
-        # Add standard deviation information as text annotation
-        std_text = "Standard Deviations:<br>" + "<br>".join([
-            f"{suite}: σ={std_devs[i]:.0f}" if std_devs[i] > 0 else f"{suite}: deterministic"
-            for i, suite in enumerate(suites)
-        ])
+        # Add value labels on bars
+        def add_value_labels(bars, values):
+            for bar, value in zip(bars, values):
+                plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(max_costs)*0.02,
+                        f'{value:.0f}', ha='center', va='bottom', fontsize=8, rotation=0)
         
-        fig.update_layout(
-            title=f"ZK-SNARK Gas Consumption - {instance_type}",
-            title_x=0.5,
-            xaxis_title="ZK-SNARK Suite",
-            yaxis_title="Gas Consumption",
-            width=1000,  # Increased width to make room for text
-            height=500,
-            showlegend=True,
-            margin=dict(r=200),  # Add right margin for text
-            annotations=[
-                dict(
-                    text=std_text,
-                    xref="paper", yref="paper",
-                    x=1.02, y=0.8,  # Position outside plot area
-                    xanchor="left", yanchor="top",
-                    showarrow=False,
-                    font=dict(size=10),
-                    bgcolor="rgba(255,255,255,0.8)",
-                    bordercolor="black",
-                    borderwidth=1
-                )
-            ]
-        )
+        add_value_labels(bars1, min_costs)
+        add_value_labels(bars2, avg_costs)
+        add_value_labels(bars3, max_costs)
         
-        fig.write_image(output_dir / 'gas_consumption.png')
+        plt.tight_layout()
+        plt.savefig(output_dir / 'gas_consumption.png', dpi=300, bbox_inches='tight')
+        plt.close()
         print("Generated gas_consumption.png")
     
     print("Plot generation completed!")
