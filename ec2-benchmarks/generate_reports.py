@@ -118,10 +118,11 @@ def generate_plots(json_file_path):
         # Create custom legend
         plt.legend(title='Statistics')
         
-        # Add std dev as text annotation
+        # Add std dev
         std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
-        plt.text(0.02, 0.70, std_text, transform=plt.gca().transAxes, 
-                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', horizontalalignment='left',
+                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
                  fontsize=9)
         
         # Add value labels on bars
@@ -200,10 +201,11 @@ def generate_plots(json_file_path):
         # Create custom legend
         plt.legend(title='Statistics')
         
-        # Add std dev as text annotation
+        # Add std dev
         std_text = "Standard Deviations:\n" + "\n".join(legend_labels)
-        plt.text(0.02, 0.70, std_text, transform=plt.gca().transAxes, 
-                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+        plt.text(0.02, 0.98, std_text, transform=plt.gca().transAxes, 
+                 verticalalignment='top', horizontalalignment='left',
+                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
                  fontsize=9)
         
         # Add value labels on bars
