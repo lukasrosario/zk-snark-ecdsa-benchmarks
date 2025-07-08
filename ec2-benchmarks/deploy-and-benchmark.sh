@@ -309,324 +309,124 @@ if [ "$SKIP_BENCHMARKS" = false ]; then
         local ip=$1
         local instance_type=$2
         
-        log "Generating summary and collecting lightweight results from $instance_type..."
+        log "Generating summary and collecting results from $instance_type..."
         
         # Create instance-specific directory
         mkdir -p "$RESULTS_COLLECTION_DIR/$instance_type"
         
         # Create a comprehensive summary generation script on the instance
         ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip << 'REMOTE_SCRIPT'
-            # Find the latest results directory
             LATEST_RESULTS=$(find /mnt/benchmark-data -name 'results_*' -type d | sort -r | head -n1)
+            if [ -z "$LATEST_RESULTS" ]; then echo "No results found"; exit 1; fi
             
-            if [ -n "$LATEST_RESULTS" ]; then
-                echo "Found results: $LATEST_RESULTS"
-                
-                # Create final summary directory
-                SUMMARY_DIR="/tmp/benchmark_final_summary"
-                rm -rf "$SUMMARY_DIR"
-                mkdir -p "$SUMMARY_DIR"
-                
-                # Get instance info
-                INSTANCE_TYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "unknown")
-                CPU_CORES=$(nproc)
-                MEMORY_GB=$(free -g | awk '/^Mem:/{print $2}')
-                
-                # Initialize data files for simpler parsing
-                echo "" > "/tmp/proving_times.txt"
-                echo "" > "/tmp/verification_times.txt"
-                echo "" > "/tmp/gas_costs.txt"
-                echo "" > "/tmp/completed_suites.txt"
-                
-                echo "Processing benchmark data for each suite..."
-                
-                # Process each suite's results
-                for suite in snarkjs rapidsnark noir gnark; do
-                    if [ -d "$LATEST_RESULTS/$suite" ]; then
-                        echo "Processing $suite results..."
-                        
-                        # Extract proving times from hyperfine JSON
-                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
-                            proving_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null)
-                            if [ -n "$proving_time" ] && [ "$proving_time" != "null" ]; then
-                                echo "$suite:$proving_time" >> "/tmp/proving_times.txt"
-                                echo "  Proving time: ${proving_time}s"
-                            fi
-                        fi
-                        
-                        # Extract verification times from hyperfine JSON
-                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" ]; then
-                            verification_time=$(jq -r '([.results[].mean | select(. != null)] | add) / ([.results[].mean | select(. != null)] | length)' "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" 2>/dev/null)
-                            if [ -n "$verification_time" ] && [ "$verification_time" != "null" ]; then
-                                echo "$suite:$verification_time" >> "/tmp/verification_times.txt"
-                                echo "  Verification time: ${verification_time}s"
-                            fi
-                        fi
-                        
-                        # Extract gas costs
-                        gas_cost=""
-                        if [ "$suite" = "noir" ] && [ -f "$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json" ]; then
-                            gas_cost=$(jq -r '[.results[].gas_used] | add / length' "$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json" 2>/dev/null)
-                        elif [ -f "$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json" ]; then
-                            gas_cost=$(jq -r '[.results[].mean] | add / length' "$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json" 2>/dev/null)
-                        fi
-                        
-                        if [ -n "$gas_cost" ] && [ "$gas_cost" != "null" ]; then
-                            echo "$suite:$gas_cost" >> "/tmp/gas_costs.txt"
-                            echo "  Gas cost: ${gas_cost} gas"
-                        fi
-                        
-                        echo "$suite" >> "/tmp/completed_suites.txt"
-                    fi
-                done
-                
-                echo "Generating comprehensive summary report..."
-                
-                # Generate comprehensive markdown report
-                cat > "$SUMMARY_DIR/performance_summary.md" << EOF
-# ZK-SNARK ECDSA Benchmark Results
-
-**Instance:** $INSTANCE_TYPE  
-**CPU Cores:** $CPU_CORES  
-**Memory:** ${MEMORY_GB}GB  
-**Date:** $(date)
-
-## Performance Summary
-
-EOF
-                
-                # Read completed suites and generate sections
-                while read -r suite; do
-                    if [ -n "$suite" ]; then
-                        echo "### $suite" >> "$SUMMARY_DIR/performance_summary.md"
-                        echo "" >> "$SUMMARY_DIR/performance_summary.md"
-                        
-                        # Look for proving time
-                        proving_time=$(grep "^$suite:" /tmp/proving_times.txt 2>/dev/null | cut -d: -f2)
-                        if [ -n "$proving_time" ]; then
-                            printf "- **Proving Time:** %.3fs\n" "$proving_time" >> "$SUMMARY_DIR/performance_summary.md"
-                        fi
-                        
-                        # Look for verification time
-                        verification_time=$(grep "^$suite:" /tmp/verification_times.txt 2>/dev/null | cut -d: -f2)
-                        if [ -n "$verification_time" ]; then
-                            printf "- **Verification Time:** %.3fs\n" "$verification_time" >> "$SUMMARY_DIR/performance_summary.md"
-                        fi
-                        
-                        # Look for gas cost
-                        gas_cost=$(grep "^$suite:" /tmp/gas_costs.txt 2>/dev/null | cut -d: -f2)
-                        if [ -n "$gas_cost" ]; then
-                            printf "- **Gas Cost:** %.0f gas\n" "$gas_cost" >> "$SUMMARY_DIR/performance_summary.md"
-                        fi
-                        
-                        echo "" >> "$SUMMARY_DIR/performance_summary.md"
-                    fi
-                done < /tmp/completed_suites.txt
-                
-                # Generate JSON summary for plotting
-                cat > "$SUMMARY_DIR/performance_data.json" << 'JSON_EOF'
-{
-  "instance_type": "INSTANCE_TYPE_PLACEHOLDER",
-  "cpu_cores": CPU_CORES_PLACEHOLDER,
-  "memory_gb": MEMORY_GB_PLACEHOLDER,
-  "timestamp": "TIMESTAMP_PLACEHOLDER",
-  "proving_times": {
-PROVING_TIMES_PLACEHOLDER
-  },
-  "verification_times": {
-VERIFICATION_TIMES_PLACEHOLDER
-  },
-  "gas_costs": {
-GAS_COSTS_PLACEHOLDER
-  },
-  "raw_data": {
-RAW_DATA_PLACEHOLDER
-  }
-}
-JSON_EOF
-                
-                # Replace placeholders with actual data
-                sed -i "s/INSTANCE_TYPE_PLACEHOLDER/$INSTANCE_TYPE/" "$SUMMARY_DIR/performance_data.json"
-                sed -i "s/CPU_CORES_PLACEHOLDER/$CPU_CORES/" "$SUMMARY_DIR/performance_data.json"
-                sed -i "s/MEMORY_GB_PLACEHOLDER/$MEMORY_GB/" "$SUMMARY_DIR/performance_data.json"
-                sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$SUMMARY_DIR/performance_data.json"
-                
-                # Generate proving times section
-                proving_json=""
-                while read -r line; do
-                    if [ -n "$line" ]; then
-                        suite=$(echo "$line" | cut -d: -f1)
-                        time=$(echo "$line" | cut -d: -f2)
-                        if [ -n "$proving_json" ]; then
-                            proving_json="$proving_json,"
-                        fi
-                        proving_json="$proving_json\n    \"$suite\": $time"
-                    fi
-                done < /tmp/proving_times.txt
-                sed -i "s/PROVING_TIMES_PLACEHOLDER/$proving_json/" "$SUMMARY_DIR/performance_data.json"
-                
-                # Generate verification times section
-                verification_json=""
-                while read -r line; do
-                    if [ -n "$line" ]; then
-                        suite=$(echo "$line" | cut -d: -f1)
-                        time=$(echo "$line" | cut -d: -f2)
-                        if [ -n "$verification_json" ]; then
-                            verification_json="$verification_json,"
-                        fi
-                        verification_json="$verification_json\n    \"$suite\": $time"
-                    fi
-                done < /tmp/verification_times.txt
-                sed -i "s/VERIFICATION_TIMES_PLACEHOLDER/$verification_json/" "$SUMMARY_DIR/performance_data.json"
-                
-                # Generate gas costs section
-                gas_json=""
-                while read -r line; do
-                    if [ -n "$line" ]; then
-                        suite=$(echo "$line" | cut -d: -f1)
-                        cost=$(echo "$line" | cut -d: -f2)
-                        if [ -n "$gas_json" ]; then
-                            gas_json="$gas_json,"
-                        fi
-                        gas_json="$gas_json\n    \"$suite\": $cost"
-                    fi
-                done < /tmp/gas_costs.txt
-                sed -i "s/GAS_COSTS_PLACEHOLDER/$gas_json/" "$SUMMARY_DIR/performance_data.json"
-                
-                # Generate raw data for error bars
-                raw_data_json=""
-                while read -r suite; do
-                    if [ -n "$suite" ]; then
-                        if [ -n "$raw_data_json" ]; then
-                            raw_data_json="$raw_data_json,"
-                        fi
-                        raw_data_json="$raw_data_json\n    \"$suite\": {"
-                        
-                        # Extract individual times for min/max/std calculations
-                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
-                            individual_times=$(jq -r '.results[].mean | select(. != null)' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-                            if [ -n "$individual_times" ]; then
-                                raw_data_json="$raw_data_json\n      \"proving_times\": [$individual_times]"
-                            fi
-                        fi
-                        
-                        # Extract individual verification times too
-                        if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" ]; then
-                            individual_times=$(jq -r '.results[].mean | select(. != null)' "$LATEST_RESULTS/$suite/benchmarks/all_verifications_benchmark.json" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-                            if [ -n "$individual_times" ]; then
-                                raw_data_json="$raw_data_json\n      \"verification_times\": [$individual_times]"
-                            fi
-                        fi
-                        
-                        raw_data_json="$raw_data_json\n    }"
-                    fi
-                done < /tmp/completed_suites.txt
-                sed -i "s/RAW_DATA_PLACEHOLDER/$raw_data_json/" "$SUMMARY_DIR/performance_data.json"
-                
-                # Generate plots if Python is available
-                if command -v python3 &> /dev/null; then
-                    echo "Generating performance plots..."
-                    
-                    cd "$SUMMARY_DIR"
-                    if python3 /home/ubuntu/zk-snark-ecdsa-benchmarks/ec2-benchmarks/generate_plots.py performance_data.json 2>/dev/null; then
-                        echo "Performance plots generated successfully!"
-                    else
-                        echo "Plot generation failed - continuing without plots"
-                    fi
-                    cd -
-                else
-                    echo "Python3 not available - skipping plot generation"
-                fi
-                
-                echo "Final summary generation complete"
-                echo "Generated files:"
-                ls -la "$SUMMARY_DIR/"
-                
-                # Clean up temporary files
-                rm -f /tmp/proving_times.txt /tmp/verification_times.txt /tmp/gas_costs.txt /tmp/completed_suites.txt
-                
-            else
-                echo "No results directory found"
-            fi
-REMOTE_SCRIPT
-        
-        # Copy only the final summary files
-        if scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
-            ubuntu@$ip:"/tmp/benchmark_final_summary/*" \
-            "$RESULTS_COLLECTION_DIR/$instance_type/" 2>/dev/null; then
-            log "Final summary and plots collected from $instance_type"
-        else
-            warn "Failed to collect summary from $instance_type"
-        fi
-        
-        # Clean up remote temporary directory
-        ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$ip \
-            "rm -rf /tmp/benchmark_final_summary" 2>/dev/null || true
-    }
-    
-    # Collect results from all instances
-    collect_results "$T4G_IP" "t4g_medium"
-    collect_results "$C7G_IP" "c7g_xlarge"
-    collect_results "$C7I_2X_IP" "c7i_2xlarge"
-    collect_results "$C7I_4X_IP" "c7i_4xlarge"
-    
-    # Create a simple index of all collected results
-    log "Creating results index..."
-    
-    cat > "$RESULTS_COLLECTION_DIR/README.md" << 'EOF'
-# ZK-SNARK ECDSA Benchmark Results
-
-This directory contains comprehensive benchmark results from multiple EC2 instance types.
-
-## Instance Types Tested
-
-- **t4g.medium**: ARM Graviton2, 2 vCPUs, 4GB RAM
-- **c7g.xlarge**: ARM Graviton3, 4 vCPUs, 8GB RAM  
-- **c7i.2xlarge**: Intel, 8 vCPUs, 16GB RAM
-- **c7i.4xlarge**: Intel, 16 vCPUs, 32GB RAM
-
-## Results Structure
-
-Each instance directory contains:
-- `performance_summary.md` - Detailed performance report
-- `performance_data.json` - Raw performance data in JSON format
-- `proving_times.png` - Proving times visualization
-- `verification_times.png` - Verification times visualization
-- `gas_consumption.png` - Gas consumption visualization
-
-## Instance Results
-
-EOF
-    
-    # Add links to each instance's results
-    for instance_type in t4g_medium c7g_xlarge c7i_2xlarge c7i_4xlarge; do
-        if [ -d "$RESULTS_COLLECTION_DIR/$instance_type" ]; then
-            echo "### [$instance_type](./$instance_type/)" >> "$RESULTS_COLLECTION_DIR/README.md"
-            echo "" >> "$RESULTS_COLLECTION_DIR/README.md"
+            SUMMARY_DIR="/tmp/benchmark_final_summary"
+            rm -rf "$SUMMARY_DIR" && mkdir -p "$SUMMARY_DIR"
             
-            if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/performance_summary.md" ]; then
-                echo "- [Performance Summary](./$instance_type/performance_summary.md)" >> "$RESULTS_COLLECTION_DIR/README.md"
-            fi
+            INSTANCE_TYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type 2>/dev/null || echo "unknown")
+            CPU_CORES=$(nproc)
+            MEMORY_GB=$(free -g | awk '/^Mem:/{print $2}')
             
-            if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/performance_data.json" ]; then
-                echo "- [Raw Data](./$instance_type/performance_data.json)" >> "$RESULTS_COLLECTION_DIR/README.md"
-            fi
+            # --- Start JSON generation ---
+            echo "{" > "$SUMMARY_DIR/performance_data.json"
+            echo "  \"instance_type\": \"$INSTANCE_TYPE\"," >> "$SUMMARY_DIR/performance_data.json"
+            echo "  \"cpu_cores\": $CPU_CORES," >> "$SUMMARY_DIR/performance_data.json"
+            echo "  \"memory_gb\": $MEMORY_GB," >> "$SUMMARY_DIR/performance_data.json"
+            echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> "$SUMMARY_DIR/performance_data.json"
             
-            # List available plots
-            for plot in proving_times.png verification_times.png gas_consumption.png; do
-                if [ -f "$RESULTS_COLLECTION_DIR/$instance_type/$plot" ]; then
-                    echo "- [$(echo $plot | sed 's/_/ /g' | sed 's/.png//')](./$instance_type/$plot)" >> "$RESULTS_COLLECTION_DIR/README.md"
+            # --- Proving Times ---
+            echo "  \"proving_times\": {" >> "$SUMMARY_DIR/performance_data.json"
+            first_suite=true
+            for suite in snarkjs rapidsnark noir gnark; do
+                if [ -f "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" ]; then
+                    avg_time=$(jq -r '[.results[].mean] | add / length' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null)
+                    if [ -n "$avg_time" ] && [ "$avg_time" != "null" ]; then
+                        if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
+                        echo "    \"$suite\": $avg_time" >> "$SUMMARY_DIR/performance_data.json"
+                        first_suite=false
+                    fi
                 fi
             done
+            echo "  }," >> "$SUMMARY_DIR/performance_data.json"
+
+            # --- Gas Costs ---
+            echo "  \"gas_costs\": {" >> "$SUMMARY_DIR/performance_data.json"
+            first_suite=true
+            for suite in snarkjs rapidsnark noir gnark; do
+                 gas_file_snarkjs_rapidsnark="$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json"
+                 gas_file_noir="$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json"
+                 avg_gas=""
+                 if [ -f "$gas_file_snarkjs_rapidsnark" ]; then
+                    avg_gas=$(jq -r '[.results[].mean] | add / length' "$gas_file_snarkjs_rapidsnark" 2>/dev/null)
+                 elif [ -f "$gas_file_noir" ]; then
+                    avg_gas=$(jq -r '[.results[].gas_used] | add / length' "$gas_file_noir" 2>/dev/null)
+                 fi
+                 if [ -n "$avg_gas" ] && [ "$avg_gas" != "null" ]; then
+                    if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
+                    echo "    \"$suite\": $avg_gas" >> "$SUMMARY_DIR/performance_data.json"
+                    first_suite=false
+                 fi
+            done
+            echo "  }," >> "$SUMMARY_DIR/performance_data.json"
+
+            # --- Raw Data ---
+            echo "  \"raw_data\": {" >> "$SUMMARY_DIR/performance_data.json"
+            first_suite=true
+            for suite in snarkjs rapidsnark noir gnark; do
+                if [ -d "$LATEST_RESULTS/$suite" ]; then
+                    if ! $first_suite; then echo "," >> "$SUMMARY_DIR/performance_data.json"; fi
+                    echo "    \"$suite\": {" >> "$SUMMARY_DIR/performance_data.json"
+                    
+                    # Raw proving times
+                    proving_times_raw=$(jq -r '[.results[].mean] | map(select(. != null)) | join(",")' "$LATEST_RESULTS/$suite/benchmarks/all_proofs_benchmark.json" 2>/dev/null || echo "")
+                    echo "      \"proving_times\": [$proving_times_raw]" >> "$SUMMARY_DIR/performance_data.json"
+
+                    # Raw gas costs
+                    gas_file_snarkjs_rapidsnark="$LATEST_RESULTS/$suite/gas-reports/reports/all_gas_data.json"
+                    gas_file_noir="$LATEST_RESULTS/$suite/gas/gas_benchmark_summary.json"
+                    gas_costs_raw=""
+                    if [ -f "$gas_file_snarkjs_rapidsnark" ]; then
+                        gas_costs_raw=$(jq -r '[.results[].mean] | map(select(. != null)) | join(",")' "$gas_file_snarkjs_rapidsnark" 2>/dev/null || echo "")
+                    elif [ -f "$gas_file_noir" ]; then
+                        gas_costs_raw=$(jq -r '[.results[].gas_used] | map(select(. != null)) | join(",")' "$gas_file_noir" 2>/dev/null || echo "")
+                    fi
+                    echo "      ,\"gas_costs\": [$gas_costs_raw]" >> "$SUMMARY_DIR/performance_data.json"
+
+                    echo "    }" >> "$SUMMARY_DIR/performance_data.json"
+                    first_suite=false
+                fi
+            done
+            echo "  }" >> "$SUMMARY_DIR/performance_data.json"
             
-            echo "" >> "$RESULTS_COLLECTION_DIR/README.md"
+            echo "}" >> "$SUMMARY_DIR/performance_data.json"
+            # --- End JSON generation ---
+REMOTE_SCRIPT
+        
+        # Copy the generated summary files
+        scp -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -r \
+            ubuntu@$ip:"/tmp/benchmark_final_summary/*" \
+            "$RESULTS_COLLECTION_DIR/$instance_type/"
+        
+        log "Results and summary collected from $instance_type"
+    }
+
+    # Collect results from all instances
+    for instance_info in $(jq -c '.instance_info.value | to_entries[]' ../instance_outputs.json); do
+        instance_type=$(echo "$instance_info" | jq -r '.key')
+        ip=$(echo "$instance_info" | jq -r '.value.public_ip')
+        collect_results "$ip" "$instance_type"
+    done
+    
+    # Generate plots and summaries for each instance type
+    log "Generating reports for all collected results..."
+    for dir in "$RESULTS_COLLECTION_DIR"/*/; do
+        if [ -f "${dir}performance_data.json" ]; then
+            log "Processing results in $dir"
+            python3 "$SCRIPT_DIR/generate_reports.py" "${dir}performance_data.json"
         fi
     done
     
-    echo "Generated at: $(date)" >> "$RESULTS_COLLECTION_DIR/README.md"
+    log "All results collected and processed!"
     
-else
-    log "Skipping benchmark execution"
 fi
 
 # Cleanup infrastructure if requested
