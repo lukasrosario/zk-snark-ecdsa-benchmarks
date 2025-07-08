@@ -247,9 +247,9 @@ EOF
     # Wait for all instances in parallel
     wait_for_instance "$T4G_IP" "t4g.medium" &
     wait_for_instance "$C7G_IP" "c7g.xlarge" &
-    wait_for_instance "$C7I_8X_IP" "c7i.8xlarge" &
-    wait_for_instance "$C7I_4X_IP" "c7i.4xlarge" &
     wait_for_instance "$C7I_2X_IP" "c7i.2xlarge" &
+    wait_for_instance "$C7I_4X_IP" "c7i.4xlarge" &
+    wait_for_instance "$C7I_8X_IP" "c7i.8xlarge" &
     
     # Wait for all background jobs to complete
     wait
@@ -263,16 +263,16 @@ else
     if [ -f "../instance_outputs.json" ]; then
         T4G_IP=$(jq -r '.instance_info.value.t4g_medium.public_ip' ../instance_outputs.json)
         C7G_IP=$(jq -r '.instance_info.value.c7g_xlarge.public_ip' ../instance_outputs.json)
-        C7I_8X_IP=$(jq -r '.instance_info.value.c7i_8xlarge.public_ip' ../instance_outputs.json)
-        C7I_4X_IP=$(jq -r '.instance_info.value.c7i_4xlarge.public_ip' ../instance_outputs.json)
         C7I_2X_IP=$(jq -r '.instance_info.value.c7i_2xlarge.public_ip' ../instance_outputs.json)
+        C7I_4X_IP=$(jq -r '.instance_info.value.c7i_4xlarge.public_ip' ../instance_outputs.json)
+        C7I_8X_IP=$(jq -r '.instance_info.value.c7i_8xlarge.public_ip' ../instance_outputs.json)
         
         log "Using existing instances:"
         log "  t4g.medium:   $T4G_IP"
         log "  c7g.xlarge:   $C7G_IP"
-        log "  c7i.8xlarge:  $C7I_8X_IP"
-        log "  c7i.4xlarge:  $C7I_4X_IP"
         log "  c7i.2xlarge:  $C7I_2X_IP"
+        log "  c7i.4xlarge:  $C7I_4X_IP"
+        log "  c7i.8xlarge:  $C7I_8X_IP"
     else
         error "No existing instance information found. Cannot skip deployment."
         exit 1
