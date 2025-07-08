@@ -47,7 +47,7 @@ check_dependencies() {
     fi
 
     log "Checking Python dependencies..."
-    pip3 install -r "$SCRIPT_DIR/requirements.txt"
+    pip3 install --user -r "$SCRIPT_DIR/requirements.txt"
 }
 
 # Display usage information
