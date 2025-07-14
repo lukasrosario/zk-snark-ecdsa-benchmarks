@@ -2,26 +2,54 @@
 FROM ubuntu:22.04
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    build-essential \
-    cmake \
-    libgmp-dev \
-    libsodium-dev \
-    nasm \
-    curl \
-    m4 \
-    wget \
-    jq \
-    bc \
-    vim-common \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            git \
+            build-essential \
+            cmake \
+            libgmp-dev \
+            libsodium-dev \
+            nasm \
+            curl \
+            m4 \
+            wget \
+            jq \
+            bc \
+            vim-common \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get update && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+            apt-get update && \
+            apt-get install -y --fix-missing nodejs && \
+            rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install yarn
 RUN npm install -g yarn
@@ -41,10 +69,11 @@ RUN git clone https://github.com/iden3/circom.git && \
 # Install snarkjs
 RUN npm install -g snarkjs
 
-# Install hyperfine
-RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_arm64.deb && \
-    dpkg -i hyperfine_1.19.0_arm64.deb && \
-    rm hyperfine_1.19.0_arm64.deb
+# Install hyperfine (detect architecture dynamically)
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_${ARCH}.deb && \
+    dpkg -i hyperfine_1.19.0_${ARCH}.deb && \
+    rm hyperfine_1.19.0_${ARCH}.deb
 
 RUN mkdir -p /app
 
@@ -58,6 +87,9 @@ ENV PATH="/root/.foundry/bin:${PATH}"
 # Clone rapidsnark FIRST
 RUN git clone https://github.com/iden3/rapidsnark.git
 
+# Copy pre-downloaded GMP archive to avoid network issues
+COPY gmp-6.2.1.tar.xz /tmp/gmp-6.2.1.tar.xz
+
 # Build rapidsnark and run tests
 RUN cd rapidsnark && \
     # Initialize and update submodules
@@ -65,7 +97,10 @@ RUN cd rapidsnark && \
     git submodule update && \
     # Clean any existing build artifacts
     rm -rf build_prover && \
-    # Build GMP first
+    # Create depends directory and copy GMP archive
+    mkdir -p depends && \
+    cp /tmp/gmp-6.2.1.tar.xz depends/ && \
+    # Build GMP using pre-downloaded archive
     chmod +x build_gmp.sh && \
     ./build_gmp.sh host_noasm && \
     # Build rapidsnark

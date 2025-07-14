@@ -2,14 +2,28 @@
 FROM node:20-slim
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    build-essential \
-    curl \
-    wget \
-    jq \
-    bc \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            git \
+            build-essential \
+            curl \
+            wget \
+            jq \
+            bc \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -29,10 +43,11 @@ RUN git clone https://github.com/iden3/circom.git && \
 # Install snarkjs
 RUN npm install -g snarkjs
 
-# Install hyperfine
-RUN wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_arm64.deb && \
-    dpkg -i hyperfine_1.19.0_arm64.deb && \
-    rm hyperfine_1.19.0_arm64.deb
+# Install hyperfine (detect architecture dynamically)
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine_1.19.0_${ARCH}.deb && \
+    dpkg -i hyperfine_1.19.0_${ARCH}.deb && \
+    rm hyperfine_1.19.0_${ARCH}.deb
 
 # Install Foundry
 RUN curl -L https://foundry.paradigm.xyz | bash

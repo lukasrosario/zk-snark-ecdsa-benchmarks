@@ -2,13 +2,27 @@
 FROM golang:1.22-bullseye
 
 # Install system dependencies including curl, bc, jq, and hyperfine for benchmarking
-RUN apt-get update && apt-get install -y \
-    curl \
-    bc \
-    jq \
-    git \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN n=1; \
+    max=5; \
+    delay=5; \
+    while true; do \
+        (apt-get update && apt-get install -y --fix-missing \
+            curl \
+            bc \
+            jq \
+            git \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*) && break || { \
+                if [ $n -lt $max ]; then \
+                    n=$((n+1)); \
+                    echo "Command failed. Attempt $n/$max:"; \
+                    sleep $delay; \
+                else \
+                    echo "The command has failed after $n attempts."; \
+                    exit 1; \
+                fi; \
+            }; \
+    done
 
 # Install hyperfine for benchmarking (detect architecture dynamically)
 RUN ARCH=$(dpkg --print-architecture) && \
