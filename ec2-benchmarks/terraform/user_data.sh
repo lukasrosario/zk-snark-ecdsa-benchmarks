@@ -140,7 +140,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source /home/ubuntu/.cargo/env
 
 # Clone the benchmark repository
-git clone https://github.com/lukasrosario/zk-snark-ecdsa-benchmarks.git
+git clone -b lukas/private-signature https://github.com/lukasrosario/zk-snark-ecdsa-benchmarks.git
 cd zk-snark-ecdsa-benchmarks
 
 # Download powers of tau file
