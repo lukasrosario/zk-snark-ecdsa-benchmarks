@@ -60,9 +60,6 @@ cat > foundry.toml << EOF
 solc = "0.8.20"
 EOF
 
-# Get the number of public inputs from verification_key.json
-PUBLIC_INPUTS_COUNT=12 # Corresponds to R, S, MsgHash (4 limbs each)
-
 echo "📝 Creating test contract..."
 cat > src/GasTest.sol << EOF
 // SPDX-License-Identifier: MIT
@@ -81,7 +78,7 @@ contract GasTest {
         uint256[8] calldata proof,
         uint256[2] calldata commitments,
         uint256[2] calldata commitmentPok,
-        uint256[12] calldata input
+        uint256[4] calldata input
     ) public view {
         verifier.verifyProof(proof, commitments, commitmentPok, input);
     }
