@@ -10,8 +10,8 @@ import (
 // ECDSACircuit defines the circuit for ECDSA P-256 signature verification
 type ECDSACircuit struct {
 	// Signature components (r, s) as emulated field elements
-	R emulated.Element[emulated.P256Fr] `gnark:",public"`
-	S emulated.Element[emulated.P256Fr] `gnark:",public"`
+	R emulated.Element[emulated.P256Fr] `gnark:",secret"`
+	S emulated.Element[emulated.P256Fr] `gnark:",secret"`
 
 	// Message hash as emulated field element
 	MsgHash emulated.Element[emulated.P256Fr] `gnark:",public"`
