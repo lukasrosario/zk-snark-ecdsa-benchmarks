@@ -3,16 +3,16 @@
 **Instance:** t4g.medium  
 **CPU Cores:** 2  
 **Memory:** 3GB  
-**Date:** 2025-07-08T23:10:06Z
+**Date:** 2025-08-14T00:00:25Z
 
 ## Performance Summary
 
 ### gnark
 
-- **Proving Time:** 78.940s
-- **Gas Cost:** 407,664 gas
+- **Proving Time:** 79.359s
+- **Gas Cost:** 350,286 gas
 
 ### noir
 
-- **Proving Time:** 8.968s
-- **Gas Cost:** 2,396,575 gas
+- **Proving Time:** 8.996s
+- **Gas Cost:** 2,388,353 gas
