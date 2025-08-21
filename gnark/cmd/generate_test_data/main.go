@@ -21,6 +21,8 @@ import (
 	"github.com/consensys/gnark/std/signature/ecdsa"
 )
 
+const numPublicInputs = 4
+
 type TestCase struct {
 	R       string `json:"r"`
 	S       string `json:"s"`
@@ -30,8 +32,8 @@ type TestCase struct {
 }
 
 type ECDSACircuit struct {
-	R       emulated.Element[emulated.P256Fr] `gnark:",public"`
-	S       emulated.Element[emulated.P256Fr] `gnark:",public"`
+	R       emulated.Element[emulated.P256Fr] `gnark:",secret"`
+	S       emulated.Element[emulated.P256Fr] `gnark:",secret"`
 	MsgHash emulated.Element[emulated.P256Fr] `gnark:",public"`
 	PubKeyX emulated.Element[emulated.P256Fp] `gnark:",secret"`
 	PubKeyY emulated.Element[emulated.P256Fp] `gnark:",secret"`
@@ -111,8 +113,8 @@ func main() {
 		log.Fatal("Failed to extract public values from witness")
 	}
 
-	if len(publicValues) != 12 {
-		log.Printf("WARNING: Expected 12 public inputs but got %d", len(publicValues))
+	if len(publicValues) != numPublicInputs {
+		log.Printf("WARNING: Expected %d public inputs but got %d", numPublicInputs, len(publicValues))
 	}
 
 	components, err := extractProofComponents(proof)
@@ -151,7 +153,7 @@ func main() {
 		components[7], // C.Y
 	}
 
-	for i := 0; i < 12; i++ {
+	for i := 0; i < numPublicInputs; i++ {
 		hexVal := "0"
 		if i < len(publicValues) {
 			hexVal = formatFieldElement(publicValues[i].String())
@@ -192,7 +194,7 @@ contract GasTestTest is Test {
         commitmentPokArr[0] = 0x{{index .CommitmentPok 0}};
         commitmentPokArr[1] = 0x{{index .CommitmentPok 1}};
 
-        uint256[12] memory inputArr;
+        uint256[4] memory inputArr;
 {{range $i, $val := .PublicInputs}}
         inputArr[{{$i}}] = 0x{{$val}};
 {{end}}

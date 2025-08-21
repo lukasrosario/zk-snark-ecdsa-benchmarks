@@ -2,8 +2,8 @@ fn main(
     hashed_message: pub [Field; 2],
     pub_key_x: [Field; 2],
     pub_key_y: [Field; 2],
-    signature_r: pub [Field; 2],
-    signature_s: pub [Field; 2],
+    signature_r: [Field; 2],
+    signature_s: [Field; 2],
 ) {
     // Unpack field arrays back to 32-byte arrays (reverse of pack_bytes)
     let hashed_message_bytes = unpack_fields_to_32_bytes(hashed_message);
